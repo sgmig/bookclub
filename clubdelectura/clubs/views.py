@@ -295,9 +295,10 @@ class ClubMeetingCreateView(CreateView):
         return super().form_valid(form)
 
     def get_success_url(self):
-        return reverse_lazy(
-            "clubs:club-detail", kwargs={"pk": self.object.club.id}
-        )  # Redirect to club page
+        return (
+            reverse_lazy("clubs:club-detail", kwargs={"pk": self.object.club.id})
+            + "#meetings"
+        )  # Redirect to club page, on the meetings tab
 
 
 class ClubMeetingUpdateView(UpdateView):
