@@ -9,3 +9,8 @@
     flex: 0 0 auto;
     height: "90%";
 }
+
+.next-meeting {
+    background-color: #e6f7ff;
+    border-left: 4px solid #0d6efd;
+}

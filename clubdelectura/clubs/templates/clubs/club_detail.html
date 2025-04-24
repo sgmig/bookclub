@@ -46,10 +46,14 @@
                 <div class="col-md-4 mb-1">
                     <ul class="list-group mb-1">
                         {% for meeting in meetings %}
-                        <a href="#" class="list-group-item list-group-item-action club-meeting-link"
+                        <a href="#" class="list-group-item list-group-item-action club-meeting-link {% if meeting.id == next_meeting.id %}next-meeting d-flex justify-content-between align-items-center{% endif %}"
                             data-meeting-partial-details-url="{% url 'clubs:club-meeting-detail-panel' meeting.id %}">
                             <strong>{{ meeting.date }}</strong> - {{ meeting.location }}
+                            {% if meeting.id == next_meeting.id %}
+                            <span class="badge bg-primary">Next</span>
+                            {% endif %}
                         </a>
+                            
                         {% empty %}
                         <li class="list-group-item">No meetings scheduled.</li>
                         {% endfor %}

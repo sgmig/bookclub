@@ -28,9 +28,7 @@ class Club(models.Model):
 
     def next_meeting(self):
         """Get the next meeting for the club."""
-        return (
-            self.club_meetings.filter(date__gte=timezone.now()).order_by("date").first()
-        )
+        return self.meetings.filter(date__gte=timezone.now()).order_by("date").first()
 
 
 # TODO: The admin field does not do much now, but it will be useful in the future. (I hope)

@@ -72,9 +72,8 @@ class ClubDetailView(DetailView):
         context["reading_lists"] = (
             self.object.reading_lists.all()
         )  # Club’s reading lists
-        context["meetings"] = ClubMeeting.objects.filter(club=self.object).order_by(
-            "-date"
-        )  # Club meetings
+        context["meetings"] = self.object.meetings.order_by("-date")  # Club meetings
+        context["next_meeting"] = self.object.next_meeting()  # Next meeting
         return context
 
 
