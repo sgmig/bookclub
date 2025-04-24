@@ -83,9 +83,14 @@ class ReadingListItem(models.Model):
 
 
 class ClubLocation(models.Model):
-    club = models.ForeignKey(Club, on_delete=models.CASCADE, related_name="locations")
-    location = models.ForeignKey(Location, on_delete=models.CASCADE)
+    club = models.ForeignKey(
+        Club, on_delete=models.CASCADE, related_name="club_locations"
+    )
+    location = models.ForeignKey(
+        Location, on_delete=models.CASCADE, related_name="club_locations"
+    )
 
+    # Avoid duplicate locations for the same club, it does not make sense.
     constraints = [
         models.UniqueConstraint(
             fields=["club", "location"], name="unique_location_for_club"
