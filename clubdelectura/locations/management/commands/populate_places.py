@@ -12,11 +12,11 @@ class Command(BaseCommand):
     help = "Populate the database with fake places"
 
     def handle(self, *args, **kwargs):
-        self.create_places(20)  # Adjust number as needed
+        self.create_locations(20)  # Adjust number as needed
 
-    def create_places(self, count):
+    def create_locations(self, count):
         self.stdout.write("Creating places...")
-        place_type = [
+        location_type = [
             "Restaurant",
             "Cafe",
             "Coworking",
@@ -27,7 +27,7 @@ class Command(BaseCommand):
         ]
         for _ in range(count):
             Location.objects.create(
-                name=fake.first_name() + "'s " + random.choice(place_type),
+                name=fake.first_name() + "'s " + random.choice(location_type),
                 address=fake.address(),
             )
         self.stdout.write(self.style.SUCCESS(f"✅ Created {count} locations."))
