@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+{% extends 'base.html' %}
+
+{% block title %}Log In{% endblock %}
+
+{% block content %}
+
+<div class="container">
+
+    <h1>Are you sure you want to log out?</h1>    
+  
+    <form method="post" action="{% url 'accounts:logout' %}">
+    {% csrf_token %}
+    <button class="btn btn-primary" type="submit">Log out</button>
+    <a href="{% url 'index' %}" class="btn btn-primary">Cancel</a>
+    </form>
+    
+</div>
+{% endblock %}

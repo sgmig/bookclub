@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'clubs/css/club_meeting.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ club.name }}</h1>
+    <p class="text-muted">{{ club.description }}</p>
+
+    <!-- Tabs for Members, Reading Lists, and Meetings -->
+    <ul class="nav nav-tabs" id="clubTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link" id="members-tab" data-bs-toggle="tab" data-bs-target="#members" type="button"
+                role="tab">Members</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="meetings-tab" data-bs-toggle="tab" data-bs-target="#meetings" type="button"
+                role="tab">Meetings</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="reading-lists-tab" data-bs-toggle="tab" data-bs-target="#reading-lists"
+                type="button" role="tab">Reading lists</button>
+        </li>
+    </ul>
+
+    <div class="tab-content mt-3">
+        <!-- Members Tab -->
+        <div class="tab-pane fade" id="members" role="tabpanel">
+            <h3>Members</h3>
+            <ul class="list-group">
+                {% for member in members %}
+                <li class="list-group-item">{{ member.get_full_name }}</li>
+                {% empty %}
+                <li class="list-group-item">No members yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <!-- Meetings Tab -->
+        <div class="tab-pane fade" id="meetings" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-1">
+                    <ul class="list-group mb-1">
+                        {% for meeting in meetings %}
+                        <a href="#" class="list-group-item list-group-item-action club-meeting-link"
+                            data-meeting-partial-details-url="{% url 'clubs:club-meeting-detail-panel' meeting.id %}">
+                            <strong>{{ meeting.date }}</strong> - {{ meeting.location }}
+                        </a>
+                        {% empty %}
+                        <li class="list-group-item">No meetings scheduled.</li>
+                        {% endfor %}
+                    </ul>
+                    <a class="btn btn-secondary" href="{% url 'clubs:club-meeting-create' club.id %}">New Meeting</a>
+                </div>
+                <div id="club-meeting-details-panel" class="col-md-8 mb-1" style="display: none;">
+                    <!-- Meeting details are shown here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Reading Lists Tab -->
+        <div class="tab-pane fade" id="reading-lists" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-1">
+                    <h3>Reading Lists</h3>
+                    <ul class="list-group mb-1">
+                        {% for reading_list in reading_lists %}
+                        <a href="#" class="list-group-item list-group-item-action reading-list-link"
+                            data-reading-list-partial-details-url="{% url 'clubs:reading-list-detail-panel' reading_list.id %}">
+                            {{ reading_list.name }}</a>
+                        {% empty %}
+                        <li class="list-group-item">No reading lists available.</li>
+                        {% endfor %}
+                    </ul>
+                    <a class="btn btn-secondary" href="{% url 'clubs:reading-list-create' %}?club_id={{ club.id }}">New reading list</a>
+                </div>
+                <div id="reading-list-items-panel" class="col-md-8" style="display: none;">
+                    <!-- Partial template will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'clubs/js/club_detail.js' %}"></script>
+<script type="module" src="{% static 'clubs/js/reading_list/dynamic_init.js' %}"></script>
+<script src="{% static 'clubs/js/club_meeting.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,23 @@
+<div class="modal fade" id="addReadingListItemModal" tabindex="-1" aria-labelledby="addReadingListItemLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addReadingListItemLabel">Search books</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method= "POST" action="#">
+                {% csrf_token %}
+            <div class="modal-body search-books-modal-body">
+                {{ form.as_p }}
+            </div>
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Search</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if results %}
+<p>Search results: {{ results|length }}</p>
+{% endif %}

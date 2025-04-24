@@ -1,0 +1,12 @@
+.select2-container {
+    width: 100% !important; /* or a specific width */
+    min-width: 0 !important;
+}
+
+.select2-selection {
+    width: 100% !important;
+}
+
+.select2-search__field {
+    width: 100% !important;
+}

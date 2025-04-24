@@ -1,0 +1,11 @@
+.discussed-book-cards {
+    flex-wrap: nowrap; /* Prevents wrapping */
+    gap: 1rem;
+    height: 15em;
+    padding-bottom: 17px;
+}
+
+.discussed-book-cards .card {
+    flex: 0 0 auto;
+    height: "90%";
+}

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+{% extends 'base.html' %}
+
+{% block title %} BookClub home {% endblock %}
+
+{% block content %}
+
+<div class="container">
+    {% if user.is_authenticated %}
+    <h1>Welcome, {{ user.first_name }}. Thanks for logging in.</h1>
+    <a href="{% url 'accounts:logout_confirmation' %}" class="btn btn-primary">Log out</a>
+    {% else %}
+    <h1> Welcome to the BookClub app!</h1>
+    <p> This is a simple app to manage book clubs.</p>
+    <p>Login or Sign Up to get started!</p>
+    <a href="{% url 'accounts:login' %}" class="btn btn-primary">Log in</a>
+    <a href="{% url 'accounts:signup' %}" class="btn btn-primary">Sign up</a>
+    {% endif %}
+   
+    <a href="{% url 'admin:index' %}" class="btn btn-primary">ADMIN</a>
+</div>
+
+{% endblock %}

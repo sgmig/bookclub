@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}Book Details{% endblock %}
+
+{% block content %}
+<div class="container">
+<h1> {{ book.title }}</h1>
+<h2> {{ book.list_authors }}</h2>
+<h3> {{ book.year }}</h3>
+</div>
+
+{% endblock %}
+

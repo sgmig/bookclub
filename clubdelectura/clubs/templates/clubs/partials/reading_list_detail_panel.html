@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<div class="d-flex justify-content-between align-items-center mb-1">
+    <h3 id="reading-list-name">{{ reading_list.name }}</h3>
+    <button  type="button"
+        class="btn btn-primary"
+        data-search-url="{% url 'books:google-books-search-module' %}"
+        data-add-reading-list-item-url="{% url 'clubs:api-reading-list-item-list' %}"
+        data-reading-list-id="{{ reading_list.id }}"
+        id="openBookSearch">Add Book</button>
+    </div>
+<div class="table-responsive-md mb-3" style="max-height: 60vh; overflow-y: auto;">
+    <table class="table table-striped">
+        <thead class="table-light sticky-top">
+            <th>Title</th>
+            <th>Author</th>
+            <th>Year</th>
+            <th>Added by</th>
+            <th></th>
+        </thead>
+        <tbody id="reading-list-items">
+            <!-- Items will be added dynamically here -->
+            {% for item in reading_list.reading_list_items.all %}
+                {% include "clubs/partials/reading_list_item_row.html" with reading_list_item=item %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<a class="btn btn-primary" href="{% url 'clubs:reading-list-update' reading_list.id %}">Edit list</a>
+<button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteReadingListModal">
+    Delete list
+</button>
+
+<!-- Reading list delete confirmation modal -->
+{% include "clubs/partials/reading_list_delete_confirmation_modal.html" %}
+
+
+<!-- Add reading list item modal -->
+<div class="modal fade" id="bookSearchModal" data-add-reading-list-item-url="{% url 'clubs:api-reading-list-item-list' %}"
+        data-reading-list-id="{{ reading_list.id }}" data-reading-list-name="{{ reading_list.name }}" 
+        data-reading-list-item-row-url= "{% url 'clubs:reading-list-item-row' 00 %}" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content" id="bookSearchModalContent">
+      <!-- Content will be loaded here dynamically -->
+    </div>
+  </div>
+</div>

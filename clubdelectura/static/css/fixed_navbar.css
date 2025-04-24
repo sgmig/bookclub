@@ -1,0 +1,4 @@
+/* Necessary so that the contents do not overlap with the navbar */
+body {
+    padding-top: 70px;
+}

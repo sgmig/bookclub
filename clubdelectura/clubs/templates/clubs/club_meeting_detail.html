@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+{% load static %}
+{% load tz %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'clubs/css/club_meeting.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">{{ club_meeting.club.name }} meeting</h1>
+    <a class="btn btn-primary" href="{% url 'clubs:club-detail' club_meeting.club.id %}#meetings">Back to Club</a>
+    {% include "clubs/partials/club_meeting_detail_panel.html" %}
+</div>
+{% endblock %}

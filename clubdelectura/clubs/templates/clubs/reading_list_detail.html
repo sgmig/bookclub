@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %} {{reading_list.name }} {% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'clubs/css/reading_list.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if reading_list.club %}
+    <h1 class="mb-4">{{ reading_list.club.name }} reading list </h1>
+    <a class="btn btn-primary" href="{% url 'clubs:club-detail' reading_list.club.id %}#reading-lists">Back to Club</a>
+    <h2 class="mb-4 text-muted"> Created by: {{ reading_list.created_by }}</h2>
+    {% else %}
+    <h1 class="mb-4">{{ reading_list.created_by }} reading list</h1>
+    {% endif %}
+    {% include "clubs/partials/reading_list_detail_panel.html" %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script type="module" src="{% static 'clubs/js/reading_list/static_init.js' %}"></script>
+{% endblock %}

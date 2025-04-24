@@ -1,0 +1,7 @@
+<tr class="reading-list-item">
+    <td>{{ reading_list_item.book.title }}</td>
+    <td>{{ reading_list_item.book.list_authors }}</td>
+    <td>{{ reading_list_item.book.year }}</td>
+    <td>{{ reading_list_item.added_by.first_name }}</td>
+    <td><button class="btn btn-danger btn-sm remove-reading-list-item-button" data-delete-item-url="{% url 'clubs:api-reading-list-item-detail' reading_list_item.id %}">Remove</button></td>
+</tr>

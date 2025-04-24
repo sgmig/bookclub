@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<div class="card p-4 d-flex justify-content-between mb-1" id="club-meeting-details">
+    <!-- Meeting details will be added dynamically here -->
+    <h3 id="club-meeting-date" class="card-title mb-3"> {{ club_meeting.date|date:"l, F d \a\t H:i" }}</h3>
+    <div class="d-flex justify-content-between">
+        <!-- Books List -->
+        <div class="col-8 me-3">
+            <h5>Books to discuss (<span id="discussed-books-count">{{ club_meeting.discussed_books.count }}</span>)
+            </h5>
+            <div id="discussed-book-cards" class="d-flex flex-row flex-nowrap overflow-x-auto discussed-book-cards">
+                {% for discussed_book in club_meeting.discussed_books.all %}
+                <div class="card mb-1">
+                    <div class="card-body">
+                        <h6 class="card-title">{{ discussed_book.book.title }}</h6>
+                        <h6 class="card-subtitle text-muted">{{ discussed_book.book.list_author }}</h6>
+                    </div>
+                    <div class="card-footer"><small class="text-muted">
+                            Suggested by: {{ discussed_book.added_by.first_name }}</small></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <!-- Meeting Location -->
+        <div class="col-4">
+            <h5>Meeting Place</h5>
+            <p><strong id="meeting-place-name">{{ club_meeting.location.name }}</strong></p>
+            <p id="meeting-place-address" class="text-muted">{{ club_meeting.location.address }}</p>
+            <p id="meeting-place-description" class="text-muted">{{ club_meeting.location.description|default_if_none:"" }}</p>
+            <p id="meeting-place-access-details" class="text-muted">{{ club_meeting.location.access_details|default_if_none:"" }}</p>
+        </div>
+    </div>
+    <!-- Meeting notes -->
+    <h5>Meeting notes</h5>
+    <p id="meeting-extra-details" class="text-muted">{{ club_meeting.notes }}</p>
+</div>
+<a class="btn btn-primary" href="{% url 'clubs:club-meeting-update' club_meeting.id %}"> Edit meeting</a>
+<button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteMeetingModal">
+    Delete meeting
+</button>
+
+<!-- Delete confirmation modal -->
+{% include "clubs/partials/club_meeting_delete_confirmation_modal.html" %}
+

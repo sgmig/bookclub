@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Sign Up{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if form.errors %}
+    <div class="alert alert-warning" role="alert">
+        There was an error. Please try again.
+    </div>
+    {% endif %}
+    <h1>Sign up for the BookClub app</h1>
+    <p> Please provide some information to create your account:</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form|crispy }} <!-- Render the form fields as paragraphs -->
+        <button type="submit" class="btn btn-primary">Sign Up</button>
+    </form>
+</div>
+{% endblock %}

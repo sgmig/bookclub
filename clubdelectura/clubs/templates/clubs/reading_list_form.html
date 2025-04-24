@@ -1,0 +1,22 @@
+{% extends "base.html" %} 
+
+{% block content %}
+<div class="container">
+    <h2>{% if object %}Edit{% else %}Create{% endif %} Reading List</h2>
+
+    <form method="post">
+        {% csrf_token %}
+        {% load crispy_forms_tags %}
+        {{ form|crispy }}
+
+        <button type="submit" class="btn btn-primary">
+            {% if object %}Update{% else %}Create{% endif %}
+        </button>
+        {% if club %}
+        <a href="{% url 'clubs:club-detail' club.id %}#reading_lists" class="btn btn-secondary">Cancel</a>
+        {% else %}
+        <a href="{% url 'user_dashboard:dashboard' %}" class="btn btn-secondary">Cancel</a>        
+        {% endif %}
+    </form>
+</div>
+{% endblock %}

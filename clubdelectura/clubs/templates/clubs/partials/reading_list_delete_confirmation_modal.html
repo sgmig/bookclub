@@ -1,0 +1,26 @@
+<div class="modal fade" id="deleteReadingListModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirm Deletion</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <!-- FORM STARTS HERE -->
+            <form method="POST" action="{% url 'clubs:reading-list-delete' reading_list.pk %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    Are you sure you want to delete the list <strong>{{ reading_list.name }}</strong> with {{ reading_list.books.count }} items?
+                </div>
+            
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                </div>
+            </form>
+            <!-- FORM ENDS HERE -->
+
+        </div>
+    </div>
+</div>
