@@ -15,7 +15,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         self.create_users_readinglists(50)  # Adjust number as needed
-        self.create_clubs_readinglists(10)  # Adjust number as needed
+        self.create_clubs_readinglists(20)  # Adjust number as needed
         self.add_books_to_readinglists()
 
     def create_users_readinglists(self, count):
