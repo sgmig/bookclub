@@ -26,6 +26,12 @@ class Club(models.Model):
     def __str__(self):
         return self.name
 
+    def next_meeting(self):
+        """Get the next meeting for the club."""
+        return (
+            self.club_meetings.filter(date__gte=timezone.now()).order_by("date").first()
+        )
+
 
 # TODO: The admin field does not do much now, but it will be useful in the future. (I hope)
 class ClubMembership(models.Model):
@@ -106,7 +112,7 @@ class ClubLocation(models.Model):
 # Also, a book can only be discussed in a meeting if it is already part of a reading list.
 # This makes sense, but I need to make it easy to add a book to a reading list from the meeting form.
 class ClubMeeting(models.Model):
-    club = models.ForeignKey(Club, on_delete=models.CASCADE)
+    club = models.ForeignKey(Club, on_delete=models.CASCADE, related_name="meetings")
     location = models.ForeignKey(
         Location, on_delete=models.SET_NULL, null=True, blank=True
     )
