@@ -1,9 +1,10 @@
 from django.db import models
+from django.db.models import Avg, Count, Q
 
 from django.conf import settings
 from django.utils import timezone
 
-from books.models import Book
+from books.models import Book, BookRating
 from locations.models import Location
 
 # Create your models here.
@@ -29,6 +30,25 @@ class Club(models.Model):
     def next_meeting(self):
         """Get the next meeting for the club."""
         return self.meetings.filter(date__gte=timezone.now()).order_by("date").first()
+
+    # TODO: Restrict to books in the club's reading lists or already discussed in meetings?
+    def get_rated_books(self):
+        """Get books rated by the club members. Annotate with avg and number of ratings."""
+
+        rated_books = Book.objects.filter(ratings__user__in=self.members.all())
+
+        # Annotate with the average rating and the number of ratings.
+        # The number of ratings can be used to select books rated by the whole club.
+        rated_books = rated_books.annotate(
+            avg_rating=Avg(
+                "ratings__rating", filter=Q(ratings__user__in=self.members.all())
+            ),
+            n_ratings=Count(
+                "ratings__user", filter=Q(ratings__user__in=self.members.all())
+            ),
+        )
+
+        return rated_books
 
 
 # TODO: The admin field does not do much now, but it will be useful in the future. (I hope)
