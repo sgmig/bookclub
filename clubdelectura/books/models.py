@@ -85,8 +85,10 @@ class Book(models.Model):
 
 # TODO: They rating could have a modified_at field.
 class BookRating(models.Model):
-    book = models.ForeignKey(Book, on_delete=models.CASCADE)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="ratings")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ratings"
+    )
     rating = models.FloatField(
         default=0.0,
         help_text="Rating between 0 and 10",
