@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'clubs/css/club_meeting.css' %}">
+<link rel="stylesheet" href="{% static 'clubs/css/book_rating.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -97,7 +98,7 @@
                 <div class="col-md-4 mb-1">
                     <ul class="list-group mb-1">
                         {% for rated_book in rated_books %}
-                        <a href="{% url 'clubs:club-book-rating' club.id rated_book.id %}" class="list-group-item list-group-item-action book-rating-link"
+                        <a href="#" class="list-group-item list-group-item-action book-rating-link"
                             data-book-rating-partial-details-url="{% url 'clubs:club-book-rating' club.id rated_book.id %}">
                             <strong>{{ rated_book.title }}</strong> - {{ rated_book.list_authors|truncatewords:8 }} - {{ rated_book.avg_rating }} ({{ rated_book.n_ratings}} ratings)                           
                         </a>                            
@@ -121,5 +122,6 @@
 {% block extra_js %}
 <script src="{% static 'clubs/js/club_detail.js' %}"></script>
 <script type="module" src="{% static 'clubs/js/reading_list/dynamic_init.js' %}"></script>
+<script type="module" src="{% static 'clubs/js/book_rating.js' %}"></script>
 <script src="{% static 'clubs/js/club_meeting.js' %}"></script>
 {% endblock %}
