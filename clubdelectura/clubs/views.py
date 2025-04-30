@@ -36,7 +36,7 @@ from clubs.models import Club, ClubMeeting, ReadingList, ReadingListItem
 
 from clubs.forms import ClubForm, ClubMeetingForm, ReadingListForm
 
-from books.models import BookRating
+from books.models import Book, BookRating
 from books.forms import GoogleBooksSearchForm
 from books.integrations.google_books import GoogleBooksAPI
 
@@ -347,6 +347,9 @@ class ClubBookRatingListView(LoginRequiredMixin, ListView):
         book_id = self.kwargs.get("book_id")
 
         club = get_object_or_404(Club, id=club_id)
+        book = get_object_or_404(Book, id=book_id)
+
+        self.book = book  # Store the book for later use in the context
 
         # check user is clubmemeber
         if self.request.user not in club.members.all():
@@ -354,12 +357,14 @@ class ClubBookRatingListView(LoginRequiredMixin, ListView):
                 "You are not allowed to view these book ratings."
             )
 
-        # Book id is optional, but the club is required.
-        filters = {"user__in": club.members.all()}
-        if book_id:
-            filters["book__id"] = book_id
+        return BookRating.objects.filter(
+            user__in=club.members.all(), book=book
+        ).order_by("-rating")
 
-        return BookRating.objects.filter(**filters).order_by("-rating")
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["book"] = self.book  # Add the book to the context
+        return context
 
 
 # API views
