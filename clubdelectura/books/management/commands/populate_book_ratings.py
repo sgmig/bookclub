@@ -27,8 +27,14 @@ class Command(BaseCommand):
             rating_value = round(random.uniform(1, 10), 1)  # Rating between 1 and 10
 
             # Ensure the user rates a book only once
+
+            update_values = {
+                "rating": rating_value,
+                "comment": fake.paragraph(nb_sentences=7, variable_nb_sentences=True),
+            }
+
             BookRating.objects.update_or_create(
-                user=user, book=book, defaults={"rating": rating_value}
+                user=user, book=book, defaults=update_values
             )
 
         self.stdout.write(self.style.SUCCESS(f"✅ Created {count} ratings."))
