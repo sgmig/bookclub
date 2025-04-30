@@ -36,14 +36,11 @@ from clubs.models import Club, ClubMeeting, ReadingList, ReadingListItem
 
 from clubs.forms import ClubForm, ClubMeetingForm, ReadingListForm
 
+from books.models import BookRating
 from books.forms import GoogleBooksSearchForm
 from books.integrations.google_books import GoogleBooksAPI
 
 # Create your views here.
-
-
-def load_modal_content(request):
-    return render(request, "clubs/partials/modal_content.html")
 
 
 class IndexView(TemplateView):
@@ -67,6 +64,7 @@ class ClubDetailView(DetailView):
     template_name = "clubs/club_detail.html"
 
     def get_context_data(self, **kwargs):
+        """Passing context explicitly for clarity."""
         context = super().get_context_data(**kwargs)
         context["members"] = self.object.members.all()  # Get all club members
         context["reading_lists"] = (
@@ -74,6 +72,9 @@ class ClubDetailView(DetailView):
         )  # Club’s reading lists
         context["meetings"] = self.object.meetings.order_by("-date")  # Club meetings
         context["next_meeting"] = self.object.next_meeting()  # Next meeting
+        context["rated_books"] = self.object.get_rated_books().order_by(
+            "-n_ratings"
+        )  # Rated books
         return context
 
 
@@ -332,6 +333,33 @@ class ClubMeetingDeleteView(DeleteView):
             reverse_lazy("clubs:club-detail", kwargs={"pk": self.object.club.id})
             + "#meetings"
         )
+
+
+class ClubBookRatingListView(LoginRequiredMixin, ListView):
+    model = BookRating
+    template_name = "clubs/club_book_rating_list.html"
+    context_object_name = "book_ratings"
+
+    def get_queryset(self):
+        # Get the club from the URL parameters
+
+        club_id = self.kwargs.get("club_id")
+        book_id = self.kwargs.get("book_id")
+
+        club = get_object_or_404(Club, id=club_id)
+
+        # check user is clubmemeber
+        if self.request.user not in club.members.all():
+            return HttpResponseForbidden(
+                "You are not allowed to view these book ratings."
+            )
+
+        # Book id is optional, but the club is required.
+        filters = {"user__in": club.members.all()}
+        if book_id:
+            filters["book__id"] = book_id
+
+        return BookRating.objects.filter(**filters).order_by("-rating")
 
 
 # API views
