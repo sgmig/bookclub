@@ -1,0 +1,11 @@
+<h1>Ratings</h1>
+<ul class="list-group mb-1">
+{% for rating in book_ratings %}
+    <li class="list-group-item list-group-item-action">
+        <strong>{{ rating.user }}</strong> - {{ rating.rating }} 
+    </li>
+    {% empty %}
+    <li class="list-group-item">No ratings available.</li>
+    {% endfor %}
+</ul>
+
