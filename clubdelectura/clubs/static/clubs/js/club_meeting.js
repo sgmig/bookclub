@@ -24,11 +24,10 @@ document.addEventListener("DOMContentLoaded", function () {
             const clubMeetingPartialDetailUrl = link.getAttribute("data-meeting-partial-details-url")
 
             // Show the club meeting panel
-            meetingDetailsPanelEl = document.getElementById("club-meeting-details-panel")
+            const meetingDetailsPanelEl = document.getElementById("club-meeting-details-panel")
             meetingDetailsPanelEl.style.display = "block";
 
             // Loading meeting details template inside the panel
-            console.log(clubMeetingPartialDetailUrl)
             loadMeetingDetails(clubMeetingPartialDetailUrl, meetingDetailsPanelEl)
 
         });
