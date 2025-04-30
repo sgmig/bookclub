@@ -25,6 +25,10 @@
             <button class="nav-link" id="reading-lists-tab" data-bs-toggle="tab" data-bs-target="#reading-lists"
                 type="button" role="tab">Reading lists</button>
         </li>
+        <li class="nav-item">
+            <button class="nav-link" id="book-ratings-tab" data-bs-toggle="tab" data-bs-target="#book-ratings"
+                type="button" role="tab">Book ratings</button>
+        </li>
     </ul>
 
     <div class="tab-content mt-3">
@@ -86,6 +90,29 @@
                 </div>
             </div>
         </div>
+
+        <!-- Book Ratings Tab -->
+        <div class="tab-pane fade" id="book-ratings" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-1">
+                    <ul class="list-group mb-1">
+                        {% for rated_book in rated_books %}
+                        <a href="{% url 'clubs:club-book-rating' club.id rated_book.id %}" class="list-group-item list-group-item-action book-rating-link"
+                            data-book-rating-partial-details-url="{% url 'clubs:club-book-rating' club.id rated_book.id %}">
+                            <strong>{{ rated_book.title }}</strong> - {{ rated_book.list_authors|truncatewords:8 }} - {{ rated_book.avg_rating }} ({{ rated_book.n_ratings}} ratings)                           
+                        </a>                            
+                        {% empty %}
+                        <li class="list-group-item">No books rated by members.</li>
+                        {% endfor %}
+                    </ul>
+                    <a class="btn btn-secondary" href="#">Add rating</a>
+                </div>
+                <div id="book-rating-details-panel" class="col-md-8 mb-1" style="display: none;">
+                    <!-- Rating details are shown here -->
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
