@@ -8,6 +8,7 @@ from books.views import (
     BookViewSet,
     BookSearchView,
     BookSearchViewModule,
+    BookRatingDeleteView,
 )
 
 from rest_framework.routers import DefaultRouter
@@ -29,6 +30,11 @@ urlpatterns = [
     path("create-book/", BookCreateView.as_view(), name="create-book"),
     path("<int:pk>/", BookDetailView.as_view(), name="book-detail"),
     path("update/<int:pk>/", BookUpdateView.as_view(), name="update-book"),
+    path(
+        "book-rating/<int:pk>/delete/",
+        BookRatingDeleteView.as_view(),
+        name="book-rating-delete",
+    ),
     path(
         "api/",
         include(router.urls),  # Include the API URLs for the BookViewSet
