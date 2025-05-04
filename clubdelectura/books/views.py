@@ -31,7 +31,7 @@ from rest_framework import status
 # django autocomplete-light
 from dal import autocomplete
 
-from books.models import Book, Author
+from books.models import Book, Author, BookRating
 from books.forms import GoogleBooksSearchForm, BookForm
 from books.serializers import BookSerializer
 from books.integrations.google_books import (
@@ -136,6 +136,15 @@ class BookDetailView(DetailView):
     model = Book
     template_name = "books/book_detail.html"
     context_object_name = "book"
+
+
+class BookRatingDeleteView(DeleteView):
+    model = BookRating
+    template_name = "books/book_rating_delete_confirmation.html"
+    context_object_name = "book_rating"
+
+    def get_success_url(self):
+        return reverse_lazy("books:book-detail", kwargs={"pk": self.object.book.pk})
 
 
 # Class-based view for the Author autocomplete.
