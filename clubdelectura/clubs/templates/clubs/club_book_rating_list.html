@@ -15,6 +15,13 @@
 </div>
 <div class="table-responsive-md mb-3" style="max-height: 60vh; overflow-y: auto;">
     <table class="table book-ratings-table">
+          <colgroup>
+            <col style="width: 30%;">
+            <col style="width: 10%;">
+            <col style="width: 20%;">
+            <col style="width: 20%;">
+            <col style="width: 20%;">
+        </colgroup>
         <thead class="table-light sticky-top">
             <th>User</th>
             <th>Rating</th>
@@ -38,7 +45,12 @@
                 <em>No comment</em>
                 {% endif %}</td>
                 <td>{{ rating.created_at.date }}</td>
-                <td><a classhref="#">Edit</a></td>
+                <td>{% if rating.user == user %}
+                    <button type="button" class="btn btn-primary">Edit</button>
+                    {#  <button type="button" class="btn btn-danger">Delete</button>  #}
+                    <a href="{% url 'books:book-rating-delete' rating.id %}" class="btn btn-danger">Delete</a>
+                {% endif %}
+                </td>
                 </tr>
                 {% if rating.comment %}
                     <tr class="collapse comment-row" id="comment-{{ rating.id }}">
@@ -57,6 +69,5 @@
         </tbody>
     </table>
 </div>
-<a class="btn btn-primary" href="#">Edit list</a>
 
 
