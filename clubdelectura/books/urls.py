@@ -5,10 +5,11 @@ from books.views import (
     BookCreateView,
     BookUpdateView,
     AuthorAutoCompleteView,
-    BookViewSet,
     BookSearchView,
     BookSearchViewModule,
     BookRatingDeleteView,
+    BookViewSet,
+    BookRatingViewSet,
 )
 
 from rest_framework.routers import DefaultRouter
@@ -18,6 +19,7 @@ app_name = "books"
 router = DefaultRouter()
 
 router.register("book", BookViewSet, basename="api-book")
+router.register("book-rating", BookRatingViewSet, basename="api-book-rating")
 
 
 urlpatterns = [

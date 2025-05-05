@@ -26,6 +26,7 @@ from rest_framework.decorators import action
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from rest_framework import status
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 
 
 # django autocomplete-light
@@ -33,7 +34,11 @@ from dal import autocomplete
 
 from books.models import Book, Author, BookRating
 from books.forms import GoogleBooksSearchForm, BookForm
-from books.serializers import BookSerializer
+from books.serializers import (
+    BookSerializer,
+    BookRatingSerializer,
+    BookRatingCreateSerializer,
+)
 from books.integrations.google_books import (
     GoogleBooksAPI,
     parse_year_from_publication_date,
@@ -165,6 +170,7 @@ class AuthorAutoCompleteView(autocomplete.Select2QuerySetView):
 # API for the books app.
 
 
+@extend_schema(tags=["Books"])
 class BookViewSet(ModelViewSet):
     queryset = Book.objects.all()
     serializer_class = BookSerializer
@@ -222,3 +228,77 @@ class BookViewSet(ModelViewSet):
             serializer = self.get_serializer(new_book)
             # Return the created book data.
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Book Ratings"])
+class BookRatingViewSet(ModelViewSet):
+    queryset = BookRating.objects.all()
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return BookRatingCreateSerializer
+        elif self.action in ["retrieve", "list"]:
+            return BookRatingSerializer
+        return BookRatingSerializer
+
+    def get_queryset(self):
+        queryset = BookRating.objects.all()
+
+        book_id = self.request.query_params.get("book_id")
+
+        bookrating_filters = dict()
+
+        if book_id:
+            bookrating_filters["book_id"] = book_id
+
+        # I need to parse the user_id_list (comma separated) as a list of integers.
+        user_id_list = self.request.query_params.get("user_id_list")
+        if user_id_list:
+            bookrating_filters["user_id__in"] = user_id_list.split(",")
+
+        # Applying filters to the queryset.
+        queryset = queryset.filter(**bookrating_filters).order_by("book__title")
+        return queryset
+
+    def perform_create(self, serializer):
+        # Save the instance using the CreateSerializer
+        serializer.save(user=self.request.user)
+
+    @extend_schema(
+        request=BookRatingCreateSerializer,
+        responses={201: BookRatingSerializer},
+    )
+    def create(self, request, *args, **kwargs):
+        # Use the CreateSerializer for input validation
+        create_serializer = self.get_serializer(data=request.data)
+        create_serializer.is_valid(raise_exception=True)
+        self.perform_create(create_serializer)
+
+        # Re-serialize the created instance using the detail serializer
+        detail_serializer = BookRatingSerializer(
+            create_serializer.instance, context=self.get_serializer_context()
+        )
+        return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="user_id_list",
+                description="Comma-separated list of user IDs. Example: `1,2,3`",
+                required=False,
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+            ),
+            OpenApiParameter(
+                name="book_id",
+                description="Filter by book id",
+                required=False,
+                type=int,
+                location=OpenApiParameter.QUERY,
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        """List all book ratings, optionally filtered by user or group of users."""
+        return super().list(request, *args, **kwargs)
