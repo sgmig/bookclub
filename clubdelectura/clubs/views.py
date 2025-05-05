@@ -447,5 +447,5 @@ class ClubMeetingViewSet(ModelViewSet):
         ]
     )
     def list(self, request, *args, **kwargs):
-        """List all reading list items, optionally filtered by `reading_list_id`."""
+        """List all reading list items, optionally filtered by `club_id`."""
         return super().list(request, *args, **kwargs)
