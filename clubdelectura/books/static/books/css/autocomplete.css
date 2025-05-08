@@ -5,6 +5,7 @@
 
 .select2-selection {
     width: 100% !important;
+    height: 2.5em !important;
 }
 
 .select2-search__field {
