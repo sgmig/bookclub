@@ -30,7 +30,6 @@ document.addEventListener("DOMContentLoaded", function () {
             bookRatingDetailsPanelEl.style.display = "block";
 
             // Loading book-rating details template inside the panel
-            console.log(bookRatingPartialDetailUrl)
             loadBookRatingDetails(bookRatingPartialDetailUrl, bookRatingDetailsPanelEl)
 
         });
