@@ -39,9 +39,7 @@ class ReadingListForm(forms.ModelForm):
             self.fields["club"].disabled = True
         elif user:
             # Filter clubs where the user is a member
-            self.fields["club"].queryset = (
-                user.clubs.all()
-            )  # adjust this line based on your actual related name
+            self.fields["club"].queryset = user.clubs.all()
         else:
             self.fields["club"].queryset = self.fields["club"].queryset.none()
 
