@@ -11,6 +11,7 @@ from books.views import (
     BookRatingDeleteView,
     BookRatingDeleteModalView,
     BookRatingListView,
+    BookRatingCreateView,
     BookRatingUpdateView,
     BookViewSet,
     BookRatingViewSet,
@@ -42,6 +43,9 @@ urlpatterns = [
         name="book-autocomplete",
     ),
     path("book-ratings/", BookRatingListView.as_view(), name="book-rating-list"),
+    path(
+        "book-rating/create/", BookRatingCreateView.as_view(), name="book-rating-create"
+    ),
     path(
         "book-rating/<int:pk>/update/",
         BookRatingUpdateView.as_view(),

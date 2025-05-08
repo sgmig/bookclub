@@ -187,7 +187,47 @@ class BookRatingListView(ListView):
         return context
 
 
-class BookRatingUpdateView(UpdateView):
+class BookRatingCreateView(LoginRequiredMixin, CreateView):
+    model = BookRating
+    form_class = BookRatingForm
+    template_name = "books/book_rating_form.html"
+    context_object_name = "book_rating"
+
+    def dispatch(self, request, *args, **kwargs):
+        book_id = self.request.GET.get("book_id")
+        if book_id:
+            # Get the book instance
+            self.book = get_object_or_404(Book, pk=book_id)
+
+        # Check for existing rating by this user
+        existing_rating = BookRating.objects.filter(
+            book=self.book, user=self.request.user
+        ).first()
+        if existing_rating:
+            return redirect("books:book-rating-update", pk=existing_rating.pk)
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        # The book has been set in the dispatch method.
+        if self.book:
+            # Add the book instance to the form kwargs
+            kwargs["book"] = self.book
+
+        return kwargs
+
+    def form_valid(self, form):
+        form.instance.user = self.request.user
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return (
+            reverse_lazy("books:book-rating-list") + f"?book_id={self.object.book.pk}"
+        )
+
+
+class BookRatingUpdateView(LoginRequiredMixin, UpdateView):
     model = BookRating
     form_class = BookRatingForm
     template_name = "books/book_rating_form.html"
@@ -206,7 +246,7 @@ class BookRatingUpdateView(UpdateView):
         )
 
 
-class BookRatingDeleteView(DeleteView):
+class BookRatingDeleteView(LoginRequiredMixin, DeleteView):
     model = BookRating
     template_name = "books/book_rating_delete_confirmation.html"
     context_object_name = "book_rating"
@@ -215,7 +255,7 @@ class BookRatingDeleteView(DeleteView):
         return reverse_lazy("books:book-detail", kwargs={"pk": self.object.book.pk})
 
 
-class BookRatingDeleteModalView(TemplateView):
+class BookRatingDeleteModalView(LoginRequiredMixin, TemplateView):
     template_name = "books/partials/book_rating_delete_confirmation_modal.html"
 
     def get_context_data(self, **kwargs):

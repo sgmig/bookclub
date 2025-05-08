@@ -3,14 +3,9 @@
     <div class="mb-1">
         <div class="d-flex justify-content-between align-items-center">
             <h3 id="book-title" class="mb-0">{{ book.title }}</h3>
-            <button type="button"
-                    class="btn btn-primary"
-                    data-search-url=""
-                    data-add-reading-list-item-url=""
-                    data-reading-list-id=""
-                    id="someBookRatingAction">
-            Some Action
-            </button>
+            <a href="{% url 'books:book-rating-create' %}?book_id={{ book.id }}" class="btn btn-primary"
+                id="addBookRatingAction">
+                Add your rating </a>
         </div>
         <h4 id="book-authors" class="text-muted" >{{ book.list_authors }}</h4>
     </div>

@@ -40,7 +40,7 @@ class BookRatingForm(forms.ModelForm):
         model = BookRating
         fields = ["book", "rating", "comment"]
         widgets = {
-            "book": autocomplete.ModelSelect2Multiple(
+            "book": autocomplete.ModelSelect2(
                 url="books:book-autocomplete",
                 attrs={
                     "data-placeholder": "Search for a title",
