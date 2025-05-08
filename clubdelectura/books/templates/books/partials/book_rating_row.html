@@ -12,7 +12,7 @@
     {% endif %}</td>
     <td>{{ rating.created_at.date }}</td>
     <td>{% if rating.user == user %}
-        <button type="button" class="btn btn-primary">Edit</button>
+        <a href="{% url 'books:book-rating-update' rating.id %}" class="btn btn-primary">Edit</a>
         <button type="button" class="btn btn-danger open-delete-modal-btn"  
         data-delete-rating-modal-url="{% url 'books:book-rating-delete-modal' rating.id %}">Delete</button>
         {% endif %}
