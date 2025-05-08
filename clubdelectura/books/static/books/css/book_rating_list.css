@@ -1,0 +1,3 @@
+.book-ratings-table tbody tr.main-row-even td {
+    background-color: #f8f9fa; /* Light gray, same as Bootstrap's striped bg */
+  }
