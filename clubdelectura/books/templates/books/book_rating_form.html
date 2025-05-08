@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Add book rating{% endblock %}
+
+
+{% block extra_head %}
+{{ form.media }}
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'books/css/autocomplete.css' %}"> 
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <form method="POST">
+        {% csrf_token %}
+        {% load crispy_forms_tags %}
+        
+        {% if book_rating %}    
+        <h2>Edit Rating</h2>
+        <h3 id="book-title" class="mb-1">{{ book_rating.book.title }}</h3>
+        <h4 id="book-authors" class="text-muted mb-1"> {{ book_rating.book.list_authors}}</h4>
+        {% else %}
+        <h2>Add Book Rating</h2>  
+        {% endif %}
+        {{ form|crispy }}
+        <button type="submit" class="btn btn-primary">
+            {% if book_rating %}Update{% else %}Create{% endif %}
+        </button>
+        <a href="{% url 'books:book-rating-list' %}?book_id={{ book_rating.book.id }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}
