@@ -337,7 +337,7 @@ class ClubMeetingDeleteView(DeleteView):
 
 class ClubBookRatingListView(LoginRequiredMixin, ListView):
     model = BookRating
-    template_name = "clubs/club_book_rating_list.html"
+    template_name = "books/partials/book_rating_table.html"
     context_object_name = "book_ratings"
 
     def get_queryset(self):
