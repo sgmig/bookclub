@@ -100,7 +100,7 @@
                         {% for rated_book in rated_books %}
                         <a href="#" class="list-group-item list-group-item-action book-rating-link"
                             data-book-rating-partial-details-url="{% url 'clubs:club-book-rating' club.id rated_book.id %}">
-                            <strong>{{ rated_book.title }}</strong> - {{ rated_book.list_authors|truncatewords:8 }} - {{ rated_book.avg_rating }} ({{ rated_book.n_ratings}} ratings)                           
+                            <strong>{{ rated_book.title }}</strong> - {{ rated_book.list_authors|truncatewords:8 }} - {{ rated_book.avg_rating|floatformat:2 }} ({{ rated_book.n_ratings}} ratings)                           
                         </a>                            
                         {% empty %}
                         <li class="list-group-item">No books rated by members.</li>
@@ -122,6 +122,6 @@
 {% block extra_js %}
 <script src="{% static 'clubs/js/club_detail.js' %}"></script>
 <script type="module" src="{% static 'clubs/js/reading_list/dynamic_init.js' %}"></script>
-<script type="module" src="{% static 'clubs/js/book_rating.js' %}"></script>
+<script type="module" src="{% static 'books/js/book_rating_list/dynamic_init.js' %}"></script>
 <script src="{% static 'clubs/js/club_meeting.js' %}"></script>
 {% endblock %}
