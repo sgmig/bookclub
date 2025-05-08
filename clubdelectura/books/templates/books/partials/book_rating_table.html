@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<div class="container">
+    <div class="mb-1">
+        <div class="d-flex justify-content-between align-items-center">
+            <h3 id="book-title" class="mb-0">{{ book.title }}</h3>
+            <button type="button"
+                    class="btn btn-primary"
+                    data-search-url=""
+                    data-add-reading-list-item-url=""
+                    data-reading-list-id=""
+                    id="someBookRatingAction">
+            Some Action
+            </button>
+        </div>
+        <h4 id="book-authors" class="text-muted" >{{ book.list_authors }}</h4>
+    </div>
+    <div class="table-responsive-md mb-3" style="max-height: 60vh; overflow-y: auto;">
+        <table class="table book-ratings-table">
+            <colgroup>
+                <col style="width: 30%;">
+                <col style="width: 10%;">
+                <col style="width: 20%;">
+                <col style="width: 20%;">
+                <col style="width: 20%;">
+            </colgroup>
+            <thead class="table-light sticky-top">
+                <th>User</th>
+                <th>Rating</th>
+                <th>Comment</th>
+                <th>Rated on</th>
+                <th></th>
+            </thead>
+            <tbody id="book-ratings-list">
+                {#  I need to add the striping manually because the hidden commet rows break bootstra table-stripe ordering.  #}
+                {% for rating in book_ratings %}
+                    {% include 'books/partials/book_rating_row.html' with rating=rating row_parity=forloop.counter0|divisibleby:2 %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<!-- Delete confirmation modal. Content is fetched dynamically. -->
+<div class="modal fade" id="deleteBookRatingModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content" id="deleteBookRatingModalContent">
+            <!-- MODAL CONTENTS FETCHED FROM ENDPOINT -->
+        </div>
+    </div>
+</div>

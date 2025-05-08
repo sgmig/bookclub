@@ -1,0 +1,29 @@
+<tr class="main-row-{% if row_parity %}even{%else%}odd{% endif %}" id="book-rating-row-{{ rating.id }}">
+    <td>{{ rating.user }}</td>
+    <td>{{ rating.rating }}</td>
+    <td>
+    {% if rating.comment %}
+    <a data-bs-toggle="collapse" href="#book-rating-comment-{{ rating.id }}" role="button" 
+    aria-expanded="false" aria-controls="comment-{{ rating.id }}">
+    Show comment
+    </a>
+    {% else %}
+    <em>No comment</em>
+    {% endif %}</td>
+    <td>{{ rating.created_at.date }}</td>
+    <td>{% if rating.user == user %}
+        <button type="button" class="btn btn-primary">Edit</button>
+        <button type="button" class="btn btn-danger open-delete-modal-btn"  
+        data-delete-rating-modal-url="{% url 'books:book-rating-delete-modal' rating.id %}">Delete</button>
+        {% endif %}
+    </td>
+</tr>
+{% if rating.comment %}
+    <tr class="collapse comment-row" id="book-rating-comment-{{ rating.id }}">
+    <td colspan="5">
+        <div class="card card-body">
+        {{ rating.comment|linebreaks }}
+        </div>
+    </td>
+    </tr>
+{% endif %}
