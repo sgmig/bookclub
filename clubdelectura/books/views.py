@@ -5,7 +5,9 @@ from django.conf import settings
 
 from django.db.models import Count
 
-from django.shortcuts import render, redirect
+from django.contrib.auth import get_user_model
+
+from django.shortcuts import render, redirect, get_object_or_404, get_list_or_404
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import (
@@ -43,6 +45,9 @@ from books.integrations.google_books import (
     GoogleBooksAPI,
     parse_year_from_publication_date,
 )
+
+# Defining the user model. Used in ratings.
+User = get_user_model()
 
 # Create your views here.
 # TODO: Add authentication everywhere.
@@ -143,6 +148,43 @@ class BookDetailView(DetailView):
     context_object_name = "book"
 
 
+# TODO: Check permissions for book ratings.
+class BookRatingListView(ListView):
+    model = BookRating
+    template_name = "books/book_rating_list.html"
+    context_object_name = "book_ratings"
+
+    def dispatch(self, request, *args, **kwargs):
+        book_id = request.GET.get("book_id")
+        user_ids = request.GET.getlist("user_id")
+
+        self.book = get_object_or_404(Book, pk=book_id) if book_id else None
+
+        self.users = get_list_or_404(User, pk__in=user_ids) if user_ids else None
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        # Get the queryset of book ratings.
+        # Filter by book and users if provided.
+        bookrating_filters = dict()
+        if self.book:
+            bookrating_filters["book"] = self.book
+        if self.users:
+            bookrating_filters["user__in"] = self.users
+
+        return (
+            BookRating.objects.filter(**bookrating_filters)
+            .order_by("book__title")
+            .order_by("-rating")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["book"] = self.book
+        context["users"] = self.users
+        return context
+
+
 class BookRatingDeleteView(DeleteView):
     model = BookRating
     template_name = "books/book_rating_delete_confirmation.html"
@@ -150,6 +192,15 @@ class BookRatingDeleteView(DeleteView):
 
     def get_success_url(self):
         return reverse_lazy("books:book-detail", kwargs={"pk": self.object.book.pk})
+
+
+class BookRatingDeleteModalView(TemplateView):
+    template_name = "books/partials/book_rating_delete_confirmation_modal.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["rating"] = get_object_or_404(BookRating, pk=self.kwargs["pk"])
+        return context
 
 
 # Class-based view for the Author autocomplete.

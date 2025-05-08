@@ -8,6 +8,8 @@ from books.views import (
     BookSearchView,
     BookSearchViewModule,
     BookRatingDeleteView,
+    BookRatingDeleteModalView,
+    BookRatingListView,
     BookViewSet,
     BookRatingViewSet,
 )
@@ -32,10 +34,16 @@ urlpatterns = [
     path("create-book/", BookCreateView.as_view(), name="create-book"),
     path("<int:pk>/", BookDetailView.as_view(), name="book-detail"),
     path("update/<int:pk>/", BookUpdateView.as_view(), name="update-book"),
+    path("book-ratings/", BookRatingListView.as_view(), name="book-rating-list"),
     path(
         "book-rating/<int:pk>/delete/",
         BookRatingDeleteView.as_view(),
         name="book-rating-delete",
+    ),
+    path(
+        "book-rating/<int:pk>/delete-modal/",
+        BookRatingDeleteModalView.as_view(),
+        name="book-rating-delete-modal",
     ),
     path(
         "api/",
