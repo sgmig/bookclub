@@ -3,9 +3,11 @@ from datetime import datetime
 
 from django.conf import settings
 
-from django.db.models import Count
+from django.db.models import Count, Q
 
 from django.contrib.auth import get_user_model
+
+from django import forms
 
 from django.shortcuts import render, redirect, get_object_or_404, get_list_or_404
 from django.urls import reverse_lazy
@@ -35,7 +37,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 from dal import autocomplete
 
 from books.models import Book, Author, BookRating
-from books.forms import GoogleBooksSearchForm, BookForm
+from books.forms import GoogleBooksSearchForm, BookForm, BookRatingForm
 from books.serializers import (
     BookSerializer,
     BookRatingSerializer,
@@ -185,6 +187,25 @@ class BookRatingListView(ListView):
         return context
 
 
+class BookRatingUpdateView(UpdateView):
+    model = BookRating
+    form_class = BookRatingForm
+    template_name = "books/book_rating_form.html"
+    context_object_name = "book_rating"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        # Add the book instance to the form kwargs
+        print(f"Book rating update view: {self.object.book}")
+        kwargs["book"] = self.object.book  # Get the book from the rating
+        return kwargs
+
+    def get_success_url(self):
+        return (
+            reverse_lazy("books:book-rating-list") + f"?book_id={self.object.book.pk}"
+        )
+
+
 class BookRatingDeleteView(DeleteView):
     model = BookRating
     template_name = "books/book_rating_delete_confirmation.html"
@@ -214,6 +235,21 @@ class AuthorAutoCompleteView(autocomplete.Select2QuerySetView):
 
         if self.q:
             qs = qs.filter(name__icontains=self.q)
+
+        return qs
+
+
+# Class-based view for the Author autocomplete.
+class BookAutoCompleteView(autocomplete.Select2QuerySetView):
+
+    def get_queryset(self):
+        if not self.q:
+            return Book.objects.none()
+
+        qs = Book.objects.all()
+
+        if self.q:
+            qs = qs.filter(title__icontains=self.q)
 
         return qs
 

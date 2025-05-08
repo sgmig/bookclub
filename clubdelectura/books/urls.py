@@ -5,11 +5,13 @@ from books.views import (
     BookCreateView,
     BookUpdateView,
     AuthorAutoCompleteView,
+    BookAutoCompleteView,
     BookSearchView,
     BookSearchViewModule,
     BookRatingDeleteView,
     BookRatingDeleteModalView,
     BookRatingListView,
+    BookRatingUpdateView,
     BookViewSet,
     BookRatingViewSet,
 )
@@ -34,7 +36,17 @@ urlpatterns = [
     path("create-book/", BookCreateView.as_view(), name="create-book"),
     path("<int:pk>/", BookDetailView.as_view(), name="book-detail"),
     path("update/<int:pk>/", BookUpdateView.as_view(), name="update-book"),
+    path(
+        "autocomplete/",
+        BookAutoCompleteView.as_view(),
+        name="book-autocomplete",
+    ),
     path("book-ratings/", BookRatingListView.as_view(), name="book-rating-list"),
+    path(
+        "book-rating/<int:pk>/update/",
+        BookRatingUpdateView.as_view(),
+        name="book-rating-update",
+    ),
     path(
         "book-rating/<int:pk>/delete/",
         BookRatingDeleteView.as_view(),
@@ -44,6 +56,11 @@ urlpatterns = [
         "book-rating/<int:pk>/delete-modal/",
         BookRatingDeleteModalView.as_view(),
         name="book-rating-delete-modal",
+    ),
+    path(
+        "author/autocomplete/",
+        AuthorAutoCompleteView.as_view(),
+        name="author-autocomplete",
     ),
     path(
         "api/",
