@@ -49,7 +49,7 @@
         <div class="tab-pane fade" id="meetings" role="tabpanel">
             <div class="row">
                 <div class="col-md-4 mb-1">
-                    <ul class="list-group mb-1">
+                    <ul class="list-group mb-1 overflow-y-auto" style="max-height: 60vh;">
                         {% for meeting in meetings %}
                         <a href="#" class="list-group-item list-group-item-action club-meeting-link {% if meeting.id == next_meeting.id %}next-meeting{% endif %}"
                             data-meeting-partial-details-url="{% url 'clubs:club-meeting-detail-panel' meeting.id %}">
@@ -75,7 +75,7 @@
             <div class="row">
                 <div class="col-md-4 mb-1">
                     <h3>Reading Lists</h3>
-                    <ul class="list-group mb-1">
+                    <ul class="list-group mb-1 overflow-y-auto" style="max-height: 60vh;">
                         {% for reading_list in reading_lists %}
                         <a href="#" class="list-group-item list-group-item-action reading-list-link"
                             data-reading-list-partial-details-url="{% url 'clubs:reading-list-detail-panel' reading_list.id %}">
@@ -96,7 +96,7 @@
         <div class="tab-pane fade" id="book-ratings" role="tabpanel">
             <div class="row">
                 <div class="col-md-4 mb-1">
-                    <ul class="list-group mb-1">
+                    <ul class="list-group mb-1 overflow-y-auto" style="max-height: 60vh;">
                         {% for rated_book in rated_books %}
                         <a href="#" class="list-group-item list-group-item-action book-rating-link"
                             data-book-rating-partial-details-url="{% url 'clubs:club-book-rating' club.id rated_book.id %}">
@@ -106,7 +106,7 @@
                         <li class="list-group-item">No books rated by members.</li>
                         {% endfor %}
                     </ul>
-                    <a class="btn btn-secondary" href="#">Add rating</a>
+                    <a class="btn btn-secondary" href="{% url 'books:book-rating-create' %}">Add rating</a>
                 </div>
                 <div id="book-rating-details-panel" class="col-md-8 mb-1" style="display: none;">
                     <!-- Rating details are shown here -->
