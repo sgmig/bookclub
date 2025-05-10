@@ -10,9 +10,13 @@
             <div id="discussed-book-cards" class="d-flex flex-row flex-nowrap overflow-x-auto discussed-book-cards">
                 {% for discussed_book in club_meeting.discussed_books.all %}
                 <div class="card mb-1">
-                    <div class="card-body">
+                    <div class="card-body d-flex flex-column">
                         <h6 class="card-title">{{ discussed_book.book.title }}</h6>
                         <h6 class="card-subtitle text-muted">{{ discussed_book.book.list_author }}</h6>
+                        <div class="mt-auto text-end">
+                        <a href="{% url 'books:book-rating-create' %}?book_id={{ discussed_book.book.id }}"
+                            class="btn btn-primary btn-sm mt-2">Rate</a>
+                        </div>
                     </div>
                     <div class="card-footer"><small class="text-muted">
                             Suggested by: {{ discussed_book.added_by.first_name }}</small></div>
