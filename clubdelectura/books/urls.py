@@ -13,6 +13,7 @@ from books.views import (
     BookRatingListView,
     BookRatingCreateView,
     BookRatingUpdateView,
+    BookRatingModalView,
     BookViewSet,
     BookRatingViewSet,
 )
@@ -46,6 +47,7 @@ urlpatterns = [
     path(
         "book-rating/create/", BookRatingCreateView.as_view(), name="book-rating-create"
     ),
+    path("book-rating/modal/", BookRatingModalView.as_view(), name="book-rating-modal"),
     path(
         "book-rating/<int:pk>/update/",
         BookRatingUpdateView.as_view(),
