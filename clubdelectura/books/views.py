@@ -194,17 +194,18 @@ class BookRatingCreateView(LoginRequiredMixin, CreateView):
     context_object_name = "book_rating"
 
     def dispatch(self, request, *args, **kwargs):
+        self.book = None
         book_id = self.request.GET.get("book_id")
         if book_id:
             # Get the book instance
             self.book = get_object_or_404(Book, pk=book_id)
 
-        # Check for existing rating by this user
-        existing_rating = BookRating.objects.filter(
-            book=self.book, user=self.request.user
-        ).first()
-        if existing_rating:
-            return redirect("books:book-rating-update", pk=existing_rating.pk)
+            # Check for existing rating by this user
+            existing_rating = BookRating.objects.filter(
+                book=self.book, user=self.request.user
+            ).first()
+            if existing_rating:
+                return redirect("books:book-rating-update", pk=existing_rating.pk)
 
         return super().dispatch(request, *args, **kwargs)
 
@@ -244,6 +245,52 @@ class BookRatingUpdateView(LoginRequiredMixin, UpdateView):
         return (
             reverse_lazy("books:book-rating-list") + f"?book_id={self.object.book.pk}"
         )
+
+
+class BookRatingModalView(LoginRequiredMixin, FormView):
+    form_class = BookRatingForm
+    template_name = "books/partials/book_rating_form_modal.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.book_rating = None
+        self.book = None
+        # Check if book_rating_id is provided in the GET parameters
+        book_rating_id = self.request.GET.get("book_rating_id")
+        if book_rating_id:
+            self.book_rating = get_object_or_404(BookRating, id=book_rating_id)
+        else:
+            book_id = self.request.GET.get("book_id")
+            if book_id:
+                # Get the book instance
+                book = get_object_or_404(Book, pk=book_id)
+
+                # Check for existing rating by this user
+                existing_rating = BookRating.objects.filter(
+                    book=book, user=self.request.user
+                ).first()
+                if existing_rating:
+                    self.book_rating = existing_rating
+                else:
+                    # Prefill the form with the book instance
+                    self.book = book
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        # Add the book instance to the form kwargs
+        if self.book_rating:
+            kwargs["instance"] = self.book_rating
+            kwargs["book"] = self.book_rating.book  # Get the book from the rating
+            print(f"Book rating update view: {self.book_rating.book}")
+        elif self.book:
+            kwargs["book"] = self.book
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["book_rating"] = self.book_rating  # Add the book_rating to the context
+        return context
 
 
 class BookRatingDeleteView(LoginRequiredMixin, DeleteView):
