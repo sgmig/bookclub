@@ -1,5 +1,6 @@
 // book_rating.js
-import { bindBookRatingDeleteButtons } from "./book_rating_list_buttons.js";
+import { bindBookRatingDeleteButtons, bindBookRatingModalButtons } from "./book_rating_list_buttons.js";
+
 
 // load the partial details template for the book-rating details panel
 function loadBookRatingDetails(detailPanelUrl, detailPanelEl) {
@@ -9,6 +10,7 @@ function loadBookRatingDetails(detailPanelUrl, detailPanelEl) {
             detailPanelEl.innerHTML = html;
         })
         .then(bindBookRatingDeleteButtons) // Activate remove buttons after loading the details
+        .then(bindBookRatingModalButtons) // Activate modal buttons after loading the details
         .catch(error => console.error("Error loading book-rating details:", error));
 }
 
