@@ -70,6 +70,6 @@ urlpatterns = [
     ),
     path(
         "api/",
-        include(router.urls),  # Include the API URLs for the BookViewSet
+        include(router.urls),  # Include the API URLs
     ),
 ]
