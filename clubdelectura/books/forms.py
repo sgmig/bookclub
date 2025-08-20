@@ -55,4 +55,4 @@ class BookRatingForm(forms.ModelForm):
 
         if book:
             self.fields["book"].initial = book
-            self.fields["book"].disabled = True
+            # self.fields["book"].disabled = True
