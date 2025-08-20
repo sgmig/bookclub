@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+
+{{ form.media }}
+{% load static %}
+{#  This should be loaded dynamically, or be part of the dynamic init of the ratings table.  #}
+<link rel="stylesheet" href="{% static 'books/css/autocomplete.css' %}"> 
+
+<div class="modal-header">
+    <h5 class="modal-title" id="bookRatingFormLabel">Book Rating</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<form id="bookRatingForm">
+    {% csrf_token %}
+    {% load crispy_forms_tags %}
+    <div class="modal-body add-edit-rating-modal-body">                
+        {% if book_rating %}    
+            <h2>Edit Rating</h2>
+            <h3 id="book-title" class="mb-1">{{ book_rating.book.title }}</h3>
+            <h4 id="book-authors" class="text-muted mb-1"> {{ book_rating.book.list_authors}}</h4>
+        {% else %}
+            <h2>Add Book Rating</h2>  
+        {% endif %}
+        {{ form|crispy }}
+    </div>
+    <div class="modal-footer">
+        <button type="submit" class="btn btn-primary" data-bs-dismiss="modal" id="submitBookRatingButton"
+        {% if book_rating %} 
+        data-book-rating-api-url=" {% url 'books:api-book-rating-detail' book_rating.id %}"
+        data-book-rating-api-method="PATCH"
+        {% else %}
+        data-book-rating-api-url="{% url 'books:api-book-rating-list' %}"
+        data-book-rating-api-method="POST"
+        {% endif %}>
+        Save
+        </button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" aria-label="Close">Cancel</button>
+    </div>
+</form>
