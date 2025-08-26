@@ -98,7 +98,7 @@
                 <div class="col-md-4 mb-1">
                     <ul class="list-group mb-1 overflow-y-auto" style="max-height: 60vh;">
                         {% for rated_book in rated_books %}
-                        <a href="#" class="list-group-item list-group-item-action book-rating-link"
+                        <a href="#" class="list-group-item list-group-item-action book-rating-link" data-book-id="{{ rated_book.id }}"
                             data-book-rating-partial-details-url="{% url 'clubs:club-book-rating' club.id rated_book.id %}">
                             <strong>{{ rated_book.title }}</strong> - {{ rated_book.list_authors|truncatewords:8 }} - {{ rated_book.avg_rating|floatformat:2 }} ({{ rated_book.n_ratings}} ratings)                           
                         </a>                            
