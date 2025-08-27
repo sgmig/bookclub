@@ -6,7 +6,13 @@
 
 {% block content %}
 <div class="container">
-    <h1 class="mb-4">{{ club_meeting.club.name }} meeting</h1>
+    <h1 class="mb-4">  
+    {% if club_meeting %}
+        {{ club_meeting.club.name }} meeting
+    {% else %}
+        {{ club.name }} meeting
+    {% endif %}
+    </h1>
 <form method="POST">
     {% csrf_token %}
     {{ form|crispy }}
