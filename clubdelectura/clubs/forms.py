@@ -46,6 +46,21 @@ class ReadingListForm(forms.ModelForm):
 
 class ClubMeetingForm(forms.ModelForm):
 
+    # We specify the SplitDateTimeField to have better functionality across browsers.
+    # For some reason specifying the widget in the Meta class does not work as expected.
+    date = forms.SplitDateTimeField(
+        initial=timezone.now,
+        widget=forms.SplitDateTimeWidget(
+            date_attrs={"type": "date"},
+            date_format="%Y-%m-%d",
+            time_attrs={
+                "type": "time",
+                "step": "60",
+            },  # Only accept 1 minute intervals.
+            time_format="%H:%M",
+        ),
+    )
+
     location = forms.ModelChoiceField(
         queryset=Location.objects.none(),
         empty_label="Select a location",
@@ -61,6 +76,15 @@ class ClubMeetingForm(forms.ModelForm):
         fields = ["date", "location", "discussed_books", "notes"]
 
         widgets = {
+            "date": forms.SplitDateTimeWidget(
+                date_attrs={"type": "date"},
+                date_format="%Y-%m-%d",
+                time_attrs={
+                    "type": "time",
+                    "step": "60",
+                },  # Only accept 1 minute intervals.
+                time_format="%H:%M",
+            ),
             "notes": forms.Textarea(attrs={"class": "form-control"}),
         }
 
