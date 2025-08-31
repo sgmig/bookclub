@@ -326,7 +326,7 @@ class AuthorAutoCompleteView(autocomplete.Select2QuerySetView):
         return qs
 
 
-# Class-based view for the Author autocomplete.
+# Class-based view for the Book autocomplete.
 class BookAutoCompleteView(autocomplete.Select2QuerySetView):
 
     def get_queryset(self):
