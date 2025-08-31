@@ -4,6 +4,13 @@
 {% load crispy_forms_tags %}
 {% load tz %}
 
+{% block title %} Club meeting {% endblock %}
+
+{% block extra_head %}
+{{ form.media }}
+{% endblock %}
+
+
 {% block content %}
 <div class="container">
     <h1 class="mb-4">  
@@ -15,7 +22,31 @@
     </h1>
 <form method="POST">
     {% csrf_token %}
-    {{ form|crispy }}
+        <div class="container">
+        <!-- Date -->
+        <div class="mb-3">
+            {{ form.date|as_crispy_field }}
+        </div>
+        <!-- Location -->
+        <div class="mb-3">
+            {{ form.location|as_crispy_field }}
+        </div>
+        <!-- Books to discuss -->
+        <div class="row mb-3 d-flex align-items-end">
+            <div class="col-md-10 col-12">
+                {{ form.discussed_books|as_crispy_field }}  
+            </div>
+            <div class="col-md-2 col-12">
+                <button type="button" class="btn btn-sm btn-outline-primary mt-1 mb-3 w-100" data-bs-toggle="modal" data-bs-target="#">
+                    + Add new book
+                </button>
+            </div>
+        </div>
+        <!-- Notes -->
+        <div class="mb-3">
+            {{ form.notes|as_crispy_field }}
+        </div>
+    </div>
     <button class="btn btn-primary" type="submit">Update meeting</button>
 </form>
 </div>

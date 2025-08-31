@@ -1,9 +1,12 @@
 from django import forms
+from django.urls import reverse
 from django.utils import timezone
 
 from locations.models import Location
 
 from clubs.models import Club, ClubMeeting, ClubLocation, ReadingList, ReadingListItem
+
+from dal import autocomplete
 
 
 class ClubForm(forms.ModelForm):
@@ -66,9 +69,18 @@ class ClubMeetingForm(forms.ModelForm):
         empty_label="Select a location",
         widget=forms.Select(attrs={"class": "form-control", "id": "location-dropdown"}),
     )
+
     discussed_books = forms.ModelMultipleChoiceField(
-        queryset=ReadingListItem.objects.none(),  # Default: Empty queryset
-        widget=forms.CheckboxSelectMultiple(),
+        queryset=ReadingListItem.objects.all(),  # Must be a QuerySet, not a list
+        required=False,
+        widget=autocomplete.ModelSelect2Multiple(
+            url="clubs:reading-list-item-autocomplete",
+            attrs={
+                "data-placeholder": "Select books to discuss. ",
+                "help-text": "Only books from the club's reading lists are shown.",
+            },
+            forward=["club"],
+        ),
     )
 
     class Meta:
@@ -76,6 +88,7 @@ class ClubMeetingForm(forms.ModelForm):
         fields = ["date", "location", "discussed_books", "notes"]
 
         widgets = {
+            "club": forms.HiddenInput(),
             "date": forms.SplitDateTimeWidget(
                 date_attrs={"type": "date"},
                 date_format="%Y-%m-%d",
@@ -93,16 +106,15 @@ class ClubMeetingForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if club:
-            # Dynamically getting the locations associated with the club.
+            # Getting the locations associated with the club.
+            # self.fields["club"].initial = club
+
+            self.fields["discussed_books"].widget.url = reverse(
+                "clubs:reading-list-item-autocomplete", kwargs={"club_id": club.id}
+            )
 
             self.fields["location"].queryset = Location.objects.filter(
                 id__in=ClubLocation.objects.filter(club=club).values_list(
                     "location", flat=True
                 )
-            )
-
-            self.fields["discussed_books"].queryset = (
-                ReadingListItem.objects.filter(reading_list__club=club)
-                .order_by("reading_list")
-                .order_by("-created_at")
             )

@@ -31,6 +31,7 @@ from clubs.views import (
     ReadingListDeleteView,
     ReadingListItemRowView,
     ReadingListItemAddBookView,
+    ReadingListItemAutoCompleteView,
     ClubMeetingCreateView,
     ClubMeetingDetailView,
     ClubMeetingUpdateView,
@@ -102,6 +103,11 @@ urlpatterns = [
         "reading-list-item/search-book/",
         ReadingListItemAddBookView.as_view(),
         name="reading-list-item-search-book",
+    ),
+    path(
+        "<int:club_id>/reading-list-item/autocomplete/",
+        ReadingListItemAutoCompleteView.as_view(),
+        name="reading-list-item-autocomplete",
     ),
     path(
         "<int:club_id>/club-meeting/create/",

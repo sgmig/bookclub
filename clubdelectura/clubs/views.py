@@ -24,6 +24,9 @@ from rest_framework import status
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
+# django autocomplete-light
+from dal import autocomplete
+
 # Own imports
 from clubs.serializers import (
     ClubSerializer,
@@ -239,6 +242,23 @@ class ReadingListItemRowView(LoginRequiredMixin, DetailView):
         return super().dispatch(request, *args, **kwargs)
 
 
+# Class-based view for the Author autocomplete.
+class ReadingListItemAutoCompleteView(autocomplete.Select2QuerySetView):
+
+    def get_queryset(self):
+        if not self.q:
+            return ReadingListItem.objects.none()
+
+        qs = ReadingListItem.objects.all()
+
+        club_id = self.kwargs["club_id"]
+
+        if self.q:
+            qs = qs.filter(reading_list__club_id=club_id, book__title__icontains=self.q)
+
+        return qs
+
+
 # ClubMeeting views
 
 
@@ -271,7 +291,7 @@ class ClubMeetingPartialDetailView(LoginRequiredMixin, DetailView):
         return super().dispatch(request, *args, **kwargs)
 
 
-class ClubMeetingCreateView(CreateView):
+class ClubMeetingCreateView(LoginRequiredMixin, CreateView):
     model = ClubMeeting
     form_class = ClubMeetingForm
     template_name = "clubs/club_meeting_form.html"
@@ -301,7 +321,7 @@ class ClubMeetingCreateView(CreateView):
         )  # Redirect to club page, on the meetings tab
 
 
-class ClubMeetingUpdateView(UpdateView):
+class ClubMeetingUpdateView(LoginRequiredMixin, UpdateView):
     model = ClubMeeting
     form_class = ClubMeetingForm
     template_name = "clubs/club_meeting_form.html"
@@ -322,7 +342,7 @@ class ClubMeetingUpdateView(UpdateView):
         return reverse_lazy("clubs:club-meeting-detail", kwargs={"pk": self.object.pk})
 
 
-class ClubMeetingDeleteView(DeleteView):
+class ClubMeetingDeleteView(LoginRequiredMixin, DeleteView):
     model = ClubMeeting
     template_name = "clubs/club_meeting_delete_confirmation.html"
     context_object_name = "club_meeting"
