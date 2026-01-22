@@ -27,4 +27,5 @@ urlpatterns = [
     path("readers/", include("userdashboard.urls")),
     path("books/", include("books.urls")),  # Books app
     path("clubs/", include("clubs.urls")),  # Clubs app
+    path("locations/", include("locations.urls")),  # Locations app API
 ]
