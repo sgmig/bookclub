@@ -17,7 +17,6 @@ from django.http import HttpResponseForbidden
 
 # DRF
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.generics import RetrieveAPIView, ListCreateAPIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from rest_framework import status
