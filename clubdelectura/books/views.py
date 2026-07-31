@@ -89,8 +89,6 @@ class BookSearchView(LoginRequiredMixin, FormView):
         form = self.get_form()
         results = []
 
-        print(request.GET)
-
         if form.is_valid():
             books_api = GoogleBooksAPI()
             response = books_api.search_volumes(**form.cleaned_data)
@@ -114,8 +112,6 @@ class BookSearchViewModule(LoginRequiredMixin, FormView):
     def get(self, request, *args, **kwargs):
         form = self.get_form()
         results = []
-
-        print(request.GET)
 
         if form.is_valid():
 
@@ -194,6 +190,9 @@ class BookRatingCreateView(LoginRequiredMixin, CreateView):
     context_object_name = "book_rating"
 
     def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+
         self.book = None
         book_id = self.request.GET.get("book_id")
         if book_id:
@@ -237,7 +236,6 @@ class BookRatingUpdateView(LoginRequiredMixin, UpdateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         # Add the book instance to the form kwargs
-        print(f"Book rating update view: {self.object.book}")
         kwargs["book"] = self.object.book  # Get the book from the rating
         return kwargs
 
@@ -252,6 +250,9 @@ class BookRatingModalView(LoginRequiredMixin, FormView):
     template_name = "books/partials/book_rating_form_modal.html"
 
     def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+
         self.book_rating = None
         self.book = None
         # Check if book_rating_id is provided in the GET parameters
@@ -282,7 +283,6 @@ class BookRatingModalView(LoginRequiredMixin, FormView):
         if self.book_rating:
             kwargs["instance"] = self.book_rating
             kwargs["book"] = self.book_rating.book  # Get the book from the rating
-            print(f"Book rating update view: {self.book_rating.book}")
         elif self.book:
             kwargs["book"] = self.book
         return kwargs

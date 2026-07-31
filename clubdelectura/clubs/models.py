@@ -114,12 +114,13 @@ class ClubLocation(models.Model):
         Location, on_delete=models.CASCADE, related_name="club_locations"
     )
 
-    # Avoid duplicate locations for the same club, it does not make sense.
-    constraints = [
-        models.UniqueConstraint(
-            fields=["club", "location"], name="unique_location_for_club"
-        )
-    ]
+    class Meta:
+        # Avoid duplicate locations for the same club, it does not make sense.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["club", "location"], name="unique_location_for_club"
+            )
+        ]
 
     def __str__(self):
         return f"Meeting place {self.location} for club {self.club}"

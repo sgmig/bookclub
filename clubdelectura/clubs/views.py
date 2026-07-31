@@ -57,11 +57,11 @@ class IndexView(TemplateView):
 
 
 # Club views
-class ClubListView(ListView):
+class ClubListView(LoginRequiredMixin, ListView):
     model = Club
 
 
-class ClubDetailView(DetailView):
+class ClubDetailView(LoginRequiredMixin, DetailView):
     model = Club
     template_name = "clubs/club_detail.html"
 
@@ -80,21 +80,25 @@ class ClubDetailView(DetailView):
         return context
 
 
-class ClubCreateView(CreateView):
+class ClubCreateView(LoginRequiredMixin, CreateView):
     model = Club
     form_class = ClubForm
-    success_url = reverse_lazy("club_list")
+    success_url = reverse_lazy("clubs:club-list")
+
+    def form_valid(self, form):
+        form.instance.created_by = self.request.user
+        return super().form_valid(form)
 
 
-class ClubUpdateView(UpdateView):
+class ClubUpdateView(LoginRequiredMixin, UpdateView):
     model = Club
     form_class = ClubForm
-    success_url = reverse_lazy("club_list")
+    success_url = reverse_lazy("clubs:club-list")
 
 
-class ClubDeleteView(DeleteView):
+class ClubDeleteView(LoginRequiredMixin, DeleteView):
     model = Club
-    success_url = reverse_lazy("club_list")
+    success_url = reverse_lazy("clubs:club-list")
 
 
 # ReadingList Views
@@ -200,14 +204,13 @@ class ReadingListItemAddBookView(LoginRequiredMixin, FormView):
         # This method is called when valid form data has been POSTed.
         # It should return an HttpResponse.
 
+        results = []
+
         books_api = GoogleBooksAPI()
         # pass the form data to the search volumes method
         response = books_api.search_volumes(**form.cleaned_data)
-        print("Google Books API response:", response)
         if response:
             results = response.json().get("items", [])
-
-        print(f"Found {len(results)} results")
 
         return render(
             self.request,
@@ -359,25 +362,21 @@ class ClubBookRatingListView(LoginRequiredMixin, ListView):
     template_name = "books/partials/book_rating_table.html"
     context_object_name = "book_ratings"
 
-    def get_queryset(self):
-        # Get the club from the URL parameters
-
-        club_id = self.kwargs.get("club_id")
-        book_id = self.kwargs.get("book_id")
-
-        club = get_object_or_404(Club, id=club_id)
-        book = get_object_or_404(Book, id=book_id)
-
-        self.book = book  # Store the book for later use in the context
+    def dispatch(self, request, *args, **kwargs):
+        self.club = get_object_or_404(Club, id=self.kwargs.get("club_id"))
+        self.book = get_object_or_404(Book, id=self.kwargs.get("book_id"))
 
         # check user is clubmemeber
-        if self.request.user not in club.members.all():
+        if request.user not in self.club.members.all():
             return HttpResponseForbidden(
                 "You are not allowed to view these book ratings."
             )
 
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
         return BookRating.objects.filter(
-            user__in=club.members.all(), book=book
+            user__in=self.club.members.all(), book=self.book
         ).order_by("-rating")
 
     def get_context_data(self, **kwargs):
