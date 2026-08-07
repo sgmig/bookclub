@@ -114,8 +114,33 @@ class ClubCRUDViewTests(TestCase):
         self.assertRedirects(response, reverse("clubs:club-list"))
         self.assertTrue(Club.objects.filter(name="New Club").exists())
 
+    def test_create_club_adds_creator_as_member(self):
+        # Regression test: creating a club used to only set created_by,
+        # without a ClubMembership - which would immediately lock the
+        # creator out of managing their own club once membership is
+        # required for update/delete. Deliberately not selecting the
+        # creator in "members" here, to prove they get added regardless
+        # of what was picked in the form.
+        other_user = make_user("other@example.com")
+
+        response = self.client.post(
+            reverse("clubs:club-create"),
+            {
+                "name": "New Club",
+                "description": "A club.",
+                "members": [other_user.pk],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        club = Club.objects.get(name="New Club")
+        self.assertTrue(
+            ClubMembership.objects.filter(user=self.user, club=club).exists()
+        )
+
     def test_update_club_redirects_to_club_list(self):
         club = Club.objects.create(name="Old Name", created_by=self.user)
+        ClubMembership.objects.create(user=self.user, club=club)
 
         response = self.client.post(
             reverse("clubs:club-update", kwargs={"pk": club.pk}),
@@ -126,13 +151,38 @@ class ClubCRUDViewTests(TestCase):
         club.refresh_from_db()
         self.assertEqual(club.name, "Updated Name")
 
+    def test_update_club_forbidden_for_non_member(self):
+        club, member, owner = make_club_with_member()
+
+        response = self.client.get(reverse("clubs:club-update", kwargs={"pk": club.pk}))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_update_club_redirects_anonymous_to_login(self):
+        club, member, owner = make_club_with_member()
+        self.client.logout()
+
+        response = self.client.get(reverse("clubs:club-update", kwargs={"pk": club.pk}))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
     def test_delete_club_redirects_to_club_list(self):
         club = Club.objects.create(name="Doomed Club", created_by=self.user)
+        ClubMembership.objects.create(user=self.user, club=club)
 
         response = self.client.post(reverse("clubs:club-delete", kwargs={"pk": club.pk}))
 
         self.assertRedirects(response, reverse("clubs:club-list"))
         self.assertFalse(Club.objects.filter(pk=club.pk).exists())
+
+    def test_delete_club_forbidden_for_non_member(self):
+        club, member, owner = make_club_with_member()
+
+        response = self.client.get(reverse("clubs:club-delete", kwargs={"pk": club.pk}))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Club.objects.filter(pk=club.pk).exists())
 
 
 class ReadingListAccessTests(TestCase):
@@ -184,6 +234,109 @@ class ReadingListAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_full_detail_view_forbidden_to_non_member(self):
+        # ReadingListDetailView (the full page, not the partial) never had
+        # this check at all before - only its partial-view sibling did.
+        reading_list = ReadingList.objects.create(
+            name="Sci-fi", club=self.club, created_by=self.owner
+        )
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(
+            reverse("clubs:reading-list-detail", kwargs={"pk": reading_list.pk})
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_full_detail_view_redirects_anonymous_to_login(self):
+        reading_list = ReadingList.objects.create(
+            name="Sci-fi", club=self.club, created_by=self.owner
+        )
+
+        response = self.client.get(
+            reverse("clubs:reading-list-detail", kwargs={"pk": reading_list.pk})
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
+
+class ReadingListMutationPermissionTests(TestCase):
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.outsider = make_user("outsider@example.com")
+
+    def test_member_can_open_update_form_for_club_list(self):
+        reading_list = ReadingList.objects.create(
+            name="Sci-fi", club=self.club, created_by=self.owner
+        )
+        self.client.force_login(self.member)
+
+        response = self.client.get(
+            reverse("clubs:reading-list-update", kwargs={"pk": reading_list.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_member_forbidden_from_update_form_for_club_list(self):
+        reading_list = ReadingList.objects.create(
+            name="Sci-fi", club=self.club, created_by=self.owner
+        )
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(
+            reverse("clubs:reading-list-update", kwargs={"pk": reading_list.pk})
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_creator_can_delete_personal_list(self):
+        reading_list = ReadingList.objects.create(name="My List", created_by=self.owner)
+        self.client.force_login(self.owner)
+
+        response = self.client.post(
+            reverse("clubs:reading-list-delete", kwargs={"pk": reading_list.pk})
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ReadingList.objects.filter(pk=reading_list.pk).exists())
+
+    def test_non_creator_forbidden_from_deleting_personal_list(self):
+        reading_list = ReadingList.objects.create(name="My List", created_by=self.owner)
+        self.client.force_login(self.member)
+
+        response = self.client.post(
+            reverse("clubs:reading-list-delete", kwargs={"pk": reading_list.pk})
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(ReadingList.objects.filter(pk=reading_list.pk).exists())
+
+    def test_anonymous_redirected_to_login_from_update_form(self):
+        reading_list = ReadingList.objects.create(
+            name="Sci-fi", club=self.club, created_by=self.owner
+        )
+
+        response = self.client.get(
+            reverse("clubs:reading-list-update", kwargs={"pk": reading_list.pk})
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
+
+class ReadingListCreateViewAnonymousTests(TestCase):
+    def test_anonymous_user_is_redirected_not_crashed(self):
+        # Regression test: ReadingListCreateView used to have no
+        # LoginRequiredMixin at all, and unconditionally passed
+        # request.user into ReadingListForm, which called user.clubs.all()
+        # - AnonymousUser has no .clubs attribute, so this raised an
+        # unhandled AttributeError (500) instead of redirecting to login.
+        response = self.client.get(reverse("clubs:reading-list-create"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
 
 class ReadingListCreateFormTests(TestCase):
     def setUp(self):
@@ -234,19 +387,92 @@ class ClubMeetingAccessTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_anonymous_user_is_denied_access(self):
-        # NOTE: ClubMeetingDetailView.dispatch() runs its own membership
-        # check (which an AnonymousUser always fails) before calling
-        # super().dispatch(), so LoginRequiredMixin's redirect-to-login never
-        # gets a chance to run. The end result is still "access denied", but
-        # as a bare 403 instead of a login redirect. This inconsistency
-        # affects several views built on the same pattern; left as-is here
-        # and tracked under the planned permissions consolidation in
-        # docs/RECOMMENDATIONS.md rather than fixed piecemeal.
+    def test_anonymous_user_is_redirected_to_login(self):
+        # Regression test: this view used to run its own membership check
+        # (via a hand-rolled dispatch()) before LoginRequiredMixin's check
+        # ever got a chance to run, so anonymous users got a bare 403
+        # instead of a login redirect. Fixed by moving onto
+        # ClubMemberRequiredMixin, which checks authentication first.
         response = self.client.get(
             reverse("clubs:club-meeting-detail", kwargs={"pk": self.meeting.pk})
         )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
+
+class ClubMeetingMutationPermissionTests(TestCase):
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.outsider = make_user("outsider@example.com")
+        self.location = Location.objects.create(name="Library")
+        ClubLocation.objects.create(club=self.club, location=self.location)
+        self.meeting = ClubMeeting.objects.create(
+            club=self.club, location=self.location, date=timezone.now()
+        )
+
+    def test_member_can_open_create_form(self):
+        self.client.force_login(self.member)
+
+        response = self.client.get(
+            reverse("clubs:club-meeting-create", kwargs={"club_id": self.club.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_member_forbidden_from_create_form(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(
+            reverse("clubs:club-meeting-create", kwargs={"club_id": self.club.pk})
+        )
+
         self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_redirected_from_create_form(self):
+        response = self.client.get(
+            reverse("clubs:club-meeting-create", kwargs={"club_id": self.club.pk})
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
+    def test_member_can_open_update_form(self):
+        self.client.force_login(self.member)
+
+        response = self.client.get(
+            reverse("clubs:club-meeting-update", kwargs={"pk": self.meeting.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_member_forbidden_from_update_form(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(
+            reverse("clubs:club-meeting-update", kwargs={"pk": self.meeting.pk})
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_non_member_forbidden_from_deleting_meeting(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.post(
+            reverse("clubs:club-meeting-delete", kwargs={"pk": self.meeting.pk})
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(ClubMeeting.objects.filter(pk=self.meeting.pk).exists())
+
+    def test_member_can_delete_meeting(self):
+        self.client.force_login(self.member)
+
+        response = self.client.post(
+            reverse("clubs:club-meeting-delete", kwargs={"pk": self.meeting.pk})
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ClubMeeting.objects.filter(pk=self.meeting.pk).exists())
 
 
 class ClubMeetingFormLocationTests(TestCase):
@@ -338,3 +564,40 @@ class ReadingListItemAPITests(TestCase):
         )
 
         self.assertEqual(len(response.data), 1)
+
+
+class ReadingListItemRowViewTests(TestCase):
+    # Regression coverage: the personal-list branch of this view's old
+    # hand-rolled dispatch() referenced reading_list_item.created_by, but
+    # ReadingListItem has no such field (only added_by) - ReadingList does.
+    # Any request against a personal list's item raised an unhandled
+    # AttributeError (500). Fixed by moving onto ReadingListAccessRequiredMixin,
+    # which correctly checks the reading list's created_by.
+    def setUp(self):
+        self.creator = make_user("creator@example.com")
+        self.other_user = make_user("other@example.com")
+        self.reading_list = ReadingList.objects.create(
+            name="My List", created_by=self.creator
+        )
+        self.book = Book.objects.create(title="Dune", year=1965)
+        self.item = ReadingListItem.objects.create(
+            reading_list=self.reading_list, book=self.book, added_by=self.creator
+        )
+
+    def test_creator_can_view_personal_list_item_row(self):
+        self.client.force_login(self.creator)
+
+        response = self.client.get(
+            reverse("clubs:reading-list-item-row", kwargs={"pk": self.item.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_creator_forbidden_from_personal_list_item_row(self):
+        self.client.force_login(self.other_user)
+
+        response = self.client.get(
+            reverse("clubs:reading-list-item-row", kwargs={"pk": self.item.pk})
+        )
+
+        self.assertEqual(response.status_code, 403)
