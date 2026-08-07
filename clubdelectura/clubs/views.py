@@ -13,7 +13,8 @@ from django.views.generic import (
 )
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponseForbidden
+
+from clubs.mixins import ClubMemberRequiredMixin, ReadingListAccessRequiredMixin
 
 # DRF
 from rest_framework.permissions import IsAuthenticated
@@ -34,7 +35,7 @@ from clubs.serializers import (
     ClubMeetingSerializer,
 )
 
-from clubs.models import Club, ClubMeeting, ReadingList, ReadingListItem
+from clubs.models import Club, ClubMeeting, ClubMembership, ReadingList, ReadingListItem
 
 from clubs.forms import ClubForm, ClubMeetingForm, ReadingListForm
 
@@ -87,55 +88,47 @@ class ClubCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.created_by = self.request.user
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        # The creator isn't automatically a member via the "members" field
+        # alone (they may not have selected themselves) - and membership is
+        # now required to manage the club afterward, so guarantee it here.
+        ClubMembership.objects.get_or_create(user=self.request.user, club=self.object)
+        return response
 
 
-class ClubUpdateView(LoginRequiredMixin, UpdateView):
+class ClubUpdateView(ClubMemberRequiredMixin, UpdateView):
     model = Club
     form_class = ClubForm
     success_url = reverse_lazy("clubs:club-list")
 
+    def get_club(self):
+        return self.get_object()
 
-class ClubDeleteView(LoginRequiredMixin, DeleteView):
+
+class ClubDeleteView(ClubMemberRequiredMixin, DeleteView):
     model = Club
     success_url = reverse_lazy("clubs:club-list")
+
+    def get_club(self):
+        return self.get_object()
 
 
 # ReadingList Views
 
 
-class ReadingListDetailView(LoginRequiredMixin, DetailView):
+class ReadingListDetailView(ReadingListAccessRequiredMixin, DetailView):
     model = ReadingList
     template_name = "clubs/reading_list_detail.html"
     context_object_name = "reading_list"
 
 
-# TODO: See who can edit lists
-class ReadingListPartialDetailView(LoginRequiredMixin, DetailView):
+class ReadingListPartialDetailView(ReadingListAccessRequiredMixin, DetailView):
     model = ReadingList
     template_name = "clubs/partials/reading_list_detail_panel.html"
     context_object_name = "reading_list"
 
-    def dispatch(self, request, *args, **kwargs):
-        reading_list = self.get_object()
 
-        # If there is a club, we check if the user is a member. If there is no club, we check if the user is the creator.
-        if reading_list.club:
-            if (
-                request.user not in reading_list.club.members.all()
-            ):  # Check the user is clubmember
-                return HttpResponseForbidden(
-                    "You are not allowed to view this reading list."
-                )
-        elif reading_list.created_by != request.user:
-            return HttpResponseForbidden(
-                "You are not allowed to view this reading list."
-            )
-
-        return super().dispatch(request, *args, **kwargs)
-
-
-class ReadingListCreateView(CreateView):
+class ReadingListCreateView(LoginRequiredMixin, CreateView):
     model = ReadingList
     form_class = ReadingListForm
     template_name = "clubs/reading_list_form.html"
@@ -163,7 +156,7 @@ class ReadingListCreateView(CreateView):
         )  # Redirect to details page
 
 
-class ReadingListUpdateView(UpdateView):
+class ReadingListUpdateView(ReadingListAccessRequiredMixin, UpdateView):
     model = ReadingList
     form_class = ReadingListForm
     template_name = "clubs/reading_list_form.html"
@@ -181,17 +174,20 @@ class ReadingListUpdateView(UpdateView):
         )  # Redirect to details page
 
 
-class ReadingListDeleteView(DeleteView):
+class ReadingListDeleteView(ReadingListAccessRequiredMixin, DeleteView):
     model = ReadingList
     template_name = "clubs/reading_list_delete_confirmation.html"
     context_object_name = "reading_list"
 
     def get_success_url(self):
-        # Concatenate the URL with the hash to redirect to the meetings tab.
-        return (
-            reverse_lazy("clubs:club-detail", kwargs={"pk": self.object.club.id})
-            + "#reading-lists"
-        )
+        if self.object.club:
+            # Concatenate the URL with the hash to redirect to the reading-lists tab.
+            return (
+                reverse_lazy("clubs:club-detail", kwargs={"pk": self.object.club.id})
+                + "#reading-lists"
+            )
+        # Personal lists have no club to go back to.
+        return reverse_lazy("user_dashboard:dashboard")
 
 
 # ReadingListItem views. I'll use the API for most things, but for searching and adding books
@@ -219,29 +215,13 @@ class ReadingListItemAddBookView(LoginRequiredMixin, FormView):
         )
 
 
-class ReadingListItemRowView(LoginRequiredMixin, DetailView):
+class ReadingListItemRowView(ReadingListAccessRequiredMixin, DetailView):
     model = ReadingListItem
     template_name = "clubs/partials/reading_list_item_row.html"
     context_object_name = "reading_list_item"
 
-    def dispatch(self, request, *args, **kwargs):
-        reading_list_item = self.get_object()
-        # If there is a club, we check if the user is a member.
-        # If there is no club, we check if the user is the creator.
-        if reading_list_item.reading_list.club:
-            if request.user not in reading_list_item.reading_list.club.members.all():
-                # Check the user is clubmember
-                return HttpResponseForbidden(
-                    "You are not allowed to view this reading list item."
-                )
-        elif (
-            request.user != reading_list_item.created_by
-        ):  # Check the user is the creator
-            return HttpResponseForbidden(
-                "You are not allowed to view this reading list item."
-            )
-
-        return super().dispatch(request, *args, **kwargs)
+    def get_reading_list(self):
+        return self.get_object().reading_list
 
 
 # Class-based view for the Author autocomplete.
@@ -264,56 +244,48 @@ class ReadingListItemAutoCompleteView(autocomplete.Select2QuerySetView):
 # ClubMeeting views
 
 
-class ClubMeetingDetailView(LoginRequiredMixin, DetailView):
+class ClubMeetingDetailView(ClubMemberRequiredMixin, DetailView):
 
     model = ClubMeeting
     template_name = "clubs/club_meeting_detail.html"
     context_object_name = "club_meeting"
 
-    def dispatch(self, request, *args, **kwargs):
-        club_meeting = self.get_object()
-        if (
-            request.user not in club_meeting.club.members.all()
-        ):  # Check the user is clubmember
-            return HttpResponseForbidden("You are not allowed to view this meeting.")
-        return super().dispatch(request, *args, **kwargs)
+    def get_club(self):
+        return self.get_object().club
 
 
-class ClubMeetingPartialDetailView(LoginRequiredMixin, DetailView):
+class ClubMeetingPartialDetailView(ClubMemberRequiredMixin, DetailView):
     model = ClubMeeting
     template_name = "clubs/partials/club_meeting_detail_panel.html"
     context_object_name = "club_meeting"
 
-    def dispatch(self, request, *args, **kwargs):
-        club_meeting = self.get_object()
-        if (
-            request.user not in club_meeting.club.members.all()
-        ):  # Check the user is clubmember
-            return HttpResponseForbidden("You are not allowed to view this meeting.")
-        return super().dispatch(request, *args, **kwargs)
+    def get_club(self):
+        return self.get_object().club
 
 
-class ClubMeetingCreateView(LoginRequiredMixin, CreateView):
+class ClubMeetingCreateView(ClubMemberRequiredMixin, CreateView):
     model = ClubMeeting
     form_class = ClubMeetingForm
     template_name = "clubs/club_meeting_form.html"
 
+    def get_club(self):
+        return get_object_or_404(Club, id=self.kwargs["club_id"])
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["club"] = get_object_or_404(Club, id=self.kwargs["club_id"])
+        context["club"] = self.get_club()
         return context
 
     def get_form_kwargs(self):
         # Get the default kwargs for the form and add the 'club' instance
         kwargs = super().get_form_kwargs()
 
-        kwargs["club"] = get_object_or_404(Club, id=self.kwargs["club_id"])
+        kwargs["club"] = self.get_club()
 
         return kwargs
 
     def form_valid(self, form):
-        club = get_object_or_404(Club, id=self.kwargs["club_id"])
-        form.instance.club = club  # Assign club before saving
+        form.instance.club = self.get_club()  # Assign club before saving
         return super().form_valid(form)
 
     def get_success_url(self):
@@ -323,20 +295,20 @@ class ClubMeetingCreateView(LoginRequiredMixin, CreateView):
         )  # Redirect to club page, on the meetings tab
 
 
-class ClubMeetingUpdateView(LoginRequiredMixin, UpdateView):
+class ClubMeetingUpdateView(ClubMemberRequiredMixin, UpdateView):
     model = ClubMeeting
     form_class = ClubMeetingForm
     template_name = "clubs/club_meeting_form.html"
     context_object_name = "club_meeting"
 
-    def get_form_kwargs(self):
-        # Get the meeting instance
-        meeting = self.get_object()  # Get the object being edited (the meeting)
+    def get_club(self):
+        return self.get_object().club
 
-        # Get the default kwargs for the form and add the 'meeting' instance
+    def get_form_kwargs(self):
+        # Get the default kwargs for the form and add the 'club' instance
         kwargs = super().get_form_kwargs()
 
-        kwargs["club"] = meeting.club
+        kwargs["club"] = self.get_club()
 
         return kwargs
 
@@ -344,10 +316,13 @@ class ClubMeetingUpdateView(LoginRequiredMixin, UpdateView):
         return reverse_lazy("clubs:club-meeting-detail", kwargs={"pk": self.object.pk})
 
 
-class ClubMeetingDeleteView(LoginRequiredMixin, DeleteView):
+class ClubMeetingDeleteView(ClubMemberRequiredMixin, DeleteView):
     model = ClubMeeting
     template_name = "clubs/club_meeting_delete_confirmation.html"
     context_object_name = "club_meeting"
+
+    def get_club(self):
+        return self.get_object().club
 
     def get_success_url(self):
         # Concatenate the URL with the hash to redirect to the meetings tab.
@@ -357,31 +332,25 @@ class ClubMeetingDeleteView(LoginRequiredMixin, DeleteView):
         )
 
 
-class ClubBookRatingListView(LoginRequiredMixin, ListView):
+class ClubBookRatingListView(ClubMemberRequiredMixin, ListView):
     model = BookRating
     template_name = "books/partials/book_rating_table.html"
     context_object_name = "book_ratings"
 
-    def dispatch(self, request, *args, **kwargs):
-        self.club = get_object_or_404(Club, id=self.kwargs.get("club_id"))
-        self.book = get_object_or_404(Book, id=self.kwargs.get("book_id"))
+    def get_club(self):
+        return get_object_or_404(Club, id=self.kwargs.get("club_id"))
 
-        # check user is clubmemeber
-        if request.user not in self.club.members.all():
-            return HttpResponseForbidden(
-                "You are not allowed to view these book ratings."
-            )
-
-        return super().dispatch(request, *args, **kwargs)
+    def get_book(self):
+        return get_object_or_404(Book, id=self.kwargs.get("book_id"))
 
     def get_queryset(self):
         return BookRating.objects.filter(
-            user__in=self.club.members.all(), book=self.book
+            user__in=self.get_club().members.all(), book=self.get_book()
         ).order_by("-rating")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["book"] = self.book  # Add the book to the context
+        context["book"] = self.get_book()  # Add the book to the context
         return context
 
 
