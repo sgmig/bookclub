@@ -23,6 +23,7 @@ Covered in `docs/ARCHITECTURE.md`, summarized here for context:
 1. `Location` gets an owner (`created_by`).
 2. An inline "create a location" flow reachable from the meeting create/update form.
 3. Creating a location this way automatically links it to the meeting's club via `ClubLocation`.
+4. `Location` gets a privacy flag (`is_private`), and private locations' sensitive details get redacted when their creator leaves the club that uses them — see "Privacy" section below. Added after talking through the `created_by` `on_delete` question: deleting a *user account* is rare and already handled (`SET_NULL`), but a member simply *leaving a club* while keeping their account is common, and today nothing stops every future member of that club from seeing a past member's home address forever.
 
 **Explicitly deferred** (per your "eventually"): the dashboard "Locations" tab showing a user's created locations + their clubs' locations. Nothing here should require a second migration to support it later — `created_by` on `Location` plus the existing `ClubLocation` join table are already sufficient to build that view whenever it's prioritized (`Location.objects.filter(created_by=user)` and `Location.objects.filter(club_locations__club__in=user.clubs.all())`).
 
@@ -38,11 +39,36 @@ created_by = models.ForeignKey(
     blank=True,
     related_name="locations",
 )
+is_private = models.BooleanField(
+    default=True,
+    help_text="Private locations (e.g. a member's home) have their address "
+               "and access details redacted once the creator leaves the club.",
+)
 ```
 
-- **Nullable**: existing `Location` rows (seeded via `populate_locations`, or added through the admin) have no owner and can't be backfilled with a real one. New locations created through this feature will always set it.
-- **`SET_NULL` rather than `CASCADE`**: a location can be attached to a club's meetings independently of who created it (mirrors how `ClubMeeting.location` itself is `SET_NULL` — a location's lifecycle shouldn't be tied to one user's account). Deleting the creating user's account shouldn't retroactively break meeting history for the whole club.
-- One open question below on whether this is the right `on_delete` choice for your intent — flagging rather than assuming.
+- **`created_by` nullable**: existing `Location` rows (seeded via `populate_locations`, or added through the admin) have no owner and can't be backfilled with a real one. New locations created through this feature will always set it.
+- **`created_by` uses `SET_NULL` rather than `CASCADE`**: a location can be attached to a club's meetings independently of who created it (mirrors how `ClubMeeting.location` itself is `SET_NULL`). Deleting the creating user's *account* shouldn't retroactively break meeting history for the whole club — confirmed, this part of the original question is settled.
+- **`is_private` defaults to `True`**: privacy-safe default. If someone quick-adds a location and forgets to mark a public café as public, the worst case is that its address gets redacted later and someone has to re-add it — annoying, but not a privacy leak. The reverse default (defaulting to public) risks the actual bad outcome: an address that should've been protected stays visible. Set via a checkbox on the create-location modal, defaulting checked.
+
+## Privacy: redacting private-location details when a member leaves
+
+The scenario this protects against: a member hosts meetings at their home, quick-adds it as a location, marks it private; later they leave the club, but their address stays fully visible to every member who joins afterward, forever, because nothing about `Location`/`ClubLocation` is tied to the creator's *membership status* — only to their account existing at all.
+
+**What "leaving" means today, concretely.** There's no dedicated "leave club" / "remove member" flow yet (see `docs/ARCHITECTURE.md`). Membership changes happen two ways right now:
+1. Via the Django admin (`ClubMembershipAdmin` / the `ClubMembershipInline` on `ClubAdmin`) — can edit `is_active` or delete the row outright.
+2. Via `ClubForm`'s `members` field on the club edit page — this is a plain `ManyToManyField` widget; removing someone from the list calls `.set()` under the hood, which **hard-deletes their `ClubMembership` row** (not a soft `is_active=False`). So in practice, membership removal today *is* row deletion, even though `is_active` exists on the model as if it were meant to be the soft-delete mechanism. Worth knowing since it affects what event we hook into.
+
+**Proposed trigger.** A signal receiver on `ClubMembership`:
+- `post_delete` — covers both admin deletion and the `ClubForm` `.set()` path above (today's only real "leave" mechanisms).
+- Also handle `is_active` flipping from `True` to `False` via a save-time check, so this doesn't silently stop working the day a future "leave club" flow switches to soft-delete instead of hard-delete.
+
+**What redaction does**, when a membership for user `U` in club `C` is removed/deactivated: for every `Location` where `created_by = U`, `is_private = True`, and linked to `C` via `ClubLocation` — clear `address`, `access_details`, and `description`, keeping only `name`. This matches what you described: the location stays findable/nameable in meeting history ("met at Jane's place") without exposing how to actually get there. No new "redacted" flag needed — "no address on a private location" *is* the redacted state, derivable rather than stored.
+
+**What happens to the location afterward:**
+- Past `ClubMeeting` rows that already point to it are untouched — they still show the name.
+- It should stop being selectable for *new* meetings (nobody has the address to host there anymore): `ClubMeetingForm.location`'s queryset needs to exclude locations that are private and have no address. I'll implement this as a queryset filter, not a deletion of the `ClubLocation` link, so the name still shows up correctly in old meeting history rather than becoming an orphaned FK.
+
+**Known edge case, not solved here:** `address`/`access_details` live once on the `Location` row, not per-club. If a private location were ever attached to *multiple* clubs (not something this feature's own flow can produce — it only ever links to the one club it was created for — but technically possible via manual admin action), redacting it because the creator left *one* of those clubs would also blank it for the other(s), even if the creator is still active there. Flagging rather than over-building a per-club-visibility layer for a case the actual feature doesn't create.
 
 ## Proposed UX flow
 
@@ -56,13 +82,15 @@ Reusing the app's existing "quick-create modal" pattern rather than inventing a 
 
 ## Proposed backend changes
 
-- **`locations/forms.py`**: add `LocationForm` (`ModelForm` over `name`, `description`, `address`, `access_details`) — mirrors `ClubForm`/`ReadingListForm`.
+- **`locations/forms.py`**: add `LocationForm` (`ModelForm` over `name`, `description`, `address`, `access_details`, `is_private`, the last as a checkbox defaulting checked) — mirrors `ClubForm`/`ReadingListForm`.
 - **New template view** (small `FormView`, e.g. `LocationCreateModalView` in `locations/views.py`) that renders the modal partial (form only, no results/search — simpler than `GoogleBooksSearchForm`-based modals). Needs to know which club it's being created for, so the URL is club-scoped: `clubs/<club_id>/location/create-modal/` (lives under `clubs` urls since it's about a club-scoped location, same reasoning as `ReadingListItemAddBookView` living in `clubs` despite touching `books`).
 - **API**: extend the existing `LocationsViewSet` (`locations/views.py`, currently just a bare `ModelViewSet`) the same way `BookRatingViewSet`/`ReadingListItemViewSet` already split create vs. read serializers:
-  - `LocationCreateSerializer`: `name`, `description`, `address`, `access_details`, plus a write-only `club_id` (`PrimaryKeyRelatedField`).
+  - `LocationCreateSerializer`: `name`, `description`, `address`, `access_details`, `is_private`, plus a write-only `club_id` (`PrimaryKeyRelatedField`).
   - `perform_create()`: set `created_by=self.request.user`; if `club_id` was provided, also `ClubLocation.objects.get_or_create(club=club, location=location)`.
   - This keeps location creation on a single `POST /locations/api/location/` call (matching the "submit modal → one API call → JSON back" shape the JS pattern above expects), rather than two round-trips.
-- **Migration**: add nullable `created_by` to `Location`.
+- **`clubs/signals.py`** (new): `post_delete` receiver on `ClubMembership`, plus a `pre_save`/`post_save` pair detecting `is_active` transitioning to `False`, both calling a shared `redact_private_locations(user, club)` helper (probably lives on `Location`'s manager, e.g. `Location.objects.redact_for_departed_member(user, club)`) implementing the redaction described above.
+- **`ClubMeetingForm.location`**: extend the existing club-scoped queryset filter to also exclude redacted private locations (`is_private=True` and blank `address`) from the choices offered for *new* meetings.
+- **Migration**: add nullable `created_by` and `is_private` (default `True`) to `Location`.
 
 ## Permissions (needs a decision — see below)
 
@@ -73,9 +101,11 @@ Worth noting while we're here: `ClubMeetingCreateView` itself currently has **no
 ## Open questions before I implement
 
 1. **Who can add a location to a club?** Any club member (consistent with how any member can currently add reading-list items), or club admins only (`ClubMembership.is_admin` exists on the model but isn't enforced anywhere in the app today)? I'd default to **any member**, for consistency with the rest of the app's current permission granularity — but this is your call.
-2. **`created_by` on_delete behavior.** Proposing `SET_NULL` (location survives, ownership just clears) — confirm that matches your intent, versus e.g. `CASCADE` (deleting a user deletes locations only they created, even if a club is actively using one for meetings) or `DO_NOTHING` (matches `Club.created_by`'s current, TODO-flagged choice).
-3. **Should the inline-created location be usable only by this club, or should it also become visible to other clubs the user belongs to as a "suggested" location?** The ask says "automatically list it as a club location" (singular, the meeting's club) — I'm proposing exactly that and nothing more, but flagging in case you meant something broader.
+2. ~~`created_by` on_delete behavior~~ — resolved, `SET_NULL`.
+3. **Should the inline-created location be usable only by this club, or should it also become visible to other clubs the user belongs to as a "suggested" location?** The ask says "automatically list it as a club location" (singular, the meeting's club) — I'm proposing exactly that and nothing more, but flagging in case you meant something broader. (Also the cleaner choice given the multi-club redaction edge case noted above.)
 4. **Should users be able to edit/deactivate a location they created** (e.g. fix a typo in the address) from anywhere yet, or is that explicitly part of the deferred dashboard tab? I'd assume the latter — no location edit UI in this branch.
+5. **Redaction scope: `address` + `access_details` + `description`, or just the first two?** I'm proposing all three get cleared (any of them could end up holding something personal — e.g. "buzzer code 1234" could land in `description` just as easily as `access_details`), keeping only `name`. Confirm that's not over-clearing for your intent.
+6. **Should a club admin (or the location's creator, before they leave) be able to manually mark a private location as redacted/retired early** — e.g. "we don't meet at Jane's anymore" without her actually leaving the club? Not building this now (no such UI exists for anything in the app yet), but flagging since it's the natural next ask once redaction-on-leaving exists.
 
 ## Non-goals for this branch
 
@@ -83,3 +113,5 @@ Worth noting while we're here: `ClubMeetingCreateView` itself currently has **no
 - Google Maps integration (already deferred in `docs/RECOMMENDATIONS.md`, needs coordinate fields on `Location` first).
 - Fixing `ClubMeetingCreateView`'s missing membership check (noted above, belongs to the permissions-consolidation pass).
 - Editing or deleting existing `ClubLocation` links (only creation, via the new inline flow).
+- Manual/early redaction (open question #6 above) — only the automatic on-leave trigger.
+- A dedicated "leave club" / "remove member" flow — out of scope here; the redaction signal is built to work with however membership removal happens *today* (hard delete via the admin or `ClubForm`), and to keep working if that flow is built later.
