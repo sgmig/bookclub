@@ -1,0 +1,30 @@
+# Runtime dependencies for the clubdelectura app.
+# Generated from the project's working virtualenv (.djangoenv) on 2026-08-01.
+# Install with: pip install -r requirements.txt
+
+Django==5.1.7
+djangorestframework==3.15.2
+drf-spectacular==0.28.0
+django-autocomplete-light==3.12.1
+django-crispy-forms==2.3
+crispy-bootstrap5==2024.10
+psycopg2==2.9.10
+python-dotenv==1.1.0
+requests==2.32.3
+
+# --- transitive dependencies (pinned for reproducibility) ---
+asgiref==3.8.1
+attrs==25.3.0
+certifi==2025.1.31
+charset-normalizer==3.4.1
+idna==3.10
+inflection==0.5.1
+jsonschema==4.23.0
+jsonschema-specifications==2024.10.1
+PyYAML==6.0.2
+referencing==0.36.2
+rpds-py==0.24.0
+sqlparse==0.5.3
+tzdata==2025.1
+uritemplate==4.1.1
+urllib3==2.3.0

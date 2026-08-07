@@ -82,8 +82,6 @@ def parse_year_from_publication_date(date_str):
 
     # I don't care about the time or timezone info, so I truncate it.
     if len(date_str) >= 10:
-        print(date_str)
-        print(f"truncate to {date_str[:10]} ")
         date = datetime.strptime(date_str[:10], full_date_format)
     elif len(date_str) == 7:
         date = datetime.strptime(date_str, year_month_format)
