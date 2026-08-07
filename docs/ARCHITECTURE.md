@@ -2,6 +2,8 @@
 
 A Django 5.1 application for managing book clubs: creating clubs, reading lists, meetings, and book ratings. Built with server-rendered Django templates (Bootstrap 5) plus a parallel Django REST Framework API layer used mainly for HTMX/JS-driven partial updates (add/remove reading list items, meetings, ratings).
 
+> Originally written 2026-08-01, updated 2026-08-07 after merging branch `fix/small-bugs-and-tests` (PR #1). That branch fixed several of the issues originally documented here and added the project's first test suite — see `docs/JOURNAL.md` for the full change log. This doc has been updated to reflect current (fixed) behavior; items still open are called out explicitly below.
+
 ## Stack
 
 | Layer | Technology |
@@ -15,7 +17,7 @@ A Django 5.1 application for managing book clubs: creating clubs, reading lists,
 | Seed data | Custom `manage.py` management commands per app (`populate_*`), plus `Faker` for fake data generation |
 | Test data | `.sample_data/` — CSV/XLSX exports (Goodreads, Amazon reviews, best-seller lists) used to seed the DB, not part of the app runtime |
 
-There is **no `requirements.txt` / `pyproject.toml`** committed — dependencies currently only exist as an installed virtualenv (`.djangoenv/`). See recommendations doc.
+Dependencies are pinned in `requirements.txt` (runtime) and `requirements-dev.txt` (seed-data/interactive-shell tools: `Faker`, `ipython`), both at the repo root — install with `pip install -r requirements.txt` (add `-r requirements-dev.txt` for local dev). No `pyproject.toml`/lockfile beyond that.
 
 ## App structure
 
@@ -60,7 +62,7 @@ Root URLs (`clubdelectura/urls.py`) mount each app under a prefix:
 - **`ClubMembership`** — through-table: `user`, `club`, `is_admin` (unused so far), `joined_at`, `is_active`.
 - **`ReadingList`** — `name`, optional `club` FK (nullable — supports personal, club-less lists), `created_by`, `books` M2M through `ReadingListItem`.
 - **`ReadingListItem`** — `reading_list` FK, `book` FK, `added_by` FK, unique per `(reading_list, book)`.
-- **`ClubLocation`** — join table associating a `Club` with one or more `Location`s (the pool of places a club can hold meetings at). *Note: its `constraints` are defined as a plain class attribute, not inside `class Meta`, so the `UniqueConstraint` is currently inert (see recommendations).*
+- **`ClubLocation`** — join table associating a `Club` with one or more `Location`s (the pool of places a club can hold meetings at). Unique per `(club, location)`, enforced at the DB level via migration `0004_clublocation_unique_location_for_club`.
 - **`ClubMeeting`** — `club` FK, `location` FK (`SET_NULL`, optional), `date` (datetime), `discussed_books` (M2M to `ReadingListItem`, not directly to `Book` — a book must already be on a reading list to be discussed), `notes`.
 
 ### userdashboard
@@ -73,7 +75,7 @@ Root URLs (`clubdelectura/urls.py`) mount each app under a prefix:
 - No password reset / email verification flow.
 
 ### Clubs
-- Standard CRUD (`ClubListView/DetailView/CreateView/UpdateView/DeleteView`) — **none of these are `LoginRequiredMixin`-protected**, unlike most other club-related views.
+- Standard CRUD (`ClubListView/DetailView/CreateView/UpdateView/DeleteView`), all `LoginRequiredMixin`-protected and redirecting to `clubs:club-list` on success; `ClubCreateView` sets `created_by` from the logged-in user.
 - `ClubDetailView` assembles members, reading lists, meetings (ordered by `-date`), next meeting, and rated books (ordered by number of ratings) into one page.
 - Membership itself has no dedicated UI (no "join club" / "invite member" flow) — membership rows must currently be created via the admin or the `members` field on the club form (a plain multi-select of all users).
 
@@ -109,13 +111,17 @@ Root URLs (`clubdelectura/urls.py`) mount each app under a prefix:
 
 ## Notable gaps / inconsistencies observed while reviewing
 
-These are descriptive observations for the current-state doc; concrete suggestions are in the companion recommendations document.
+These are descriptive observations for the current-state doc; concrete suggestions are in the companion recommendations document. Items resolved by `fix/small-bugs-and-tests` are marked ✅; still-open items carry forward into `docs/RECOMMENDATIONS.md`.
 
-1. **`ClubCreateView`/`ClubUpdateView`/`ClubDeleteView`** set `success_url = reverse_lazy("club_list")`, but the only registered name is the namespaced `clubs:club-list` — this will raise `NoReverseMatch` the moment any of these views actually succeeds.
-2. **`ClubLocation.constraints`** is declared directly on the model class, not inside `class Meta` — the `UniqueConstraint` on `(club, location)` is silently never applied.
-3. **Authorization is inconsistent**: club CRUD views have no `LoginRequiredMixin`/permission check at all, while most other views (meetings, reading lists, ratings) do enforce membership. The DRF API layer only checks `IsAuthenticated`, not object-level membership.
-4. **`userdashboard` app naming**: URL prefix `readers/`, `app_name = "user_dashboard"`, Python package `userdashboard` — three different identifiers for one app, easy to trip over when adding new routes/links.
-5. Several views/forms have leftover `print()` debug statements (e.g. `books/views.py`, `clubs/views.py`) and a couple of `# TODO` comments marking known-unfinished behavior (documented inline in the code, cross-referenced with `to_do.txt` in the recommendations doc).
-6. No automated test coverage: every app's `tests.py` is the unmodified Django boilerplate (3 lines, no actual test cases).
-7. No `requirements.txt`/lockfile checked into the repo — the dependency list above was reconstructed from the local `.djangoenv` virtualenv.
-8. The root `templates/includes/navbar.html` has a leftover Bootstrap starter-template dropdown ("Dropdown" / "Action" / "Another action") that isn't wired to anything.
+1. ✅ ~~`ClubCreateView`/`ClubUpdateView`/`ClubDeleteView` reverse_lazy("club_list") NoReverseMatch~~ — fixed, now points to `clubs:club-list`. While fixing this, also found and fixed a second, deeper bug in the same flow: `ClubCreateView` never set `created_by`, so creating a club through the form always raised `IntegrityError` regardless of the redirect issue.
+2. ✅ ~~`ClubLocation.constraints` declared outside `class Meta`~~ — fixed and migrated (`0004_clublocation_unique_location_for_club`).
+3. **Authorization is still inconsistent, though narrower than before**:
+   - ✅ Club CRUD views now require login (`LoginRequiredMixin` added to all five).
+   - **Open**: the DRF API layer still only checks `IsAuthenticated`, not object-level membership (e.g. nothing stops an authenticated user creating a `ReadingListItem` in a reading list they don't belong to via the API).
+   - **Open, newly documented**: `ClubMeetingDetailView`, `ClubMeetingPartialDetailView`, `ReadingListPartialDetailView`, and `ReadingListItemRowView` all override `dispatch()` and run their own membership check *before* calling `super().dispatch()` — so for an anonymous user, `LoginRequiredMixin`'s redirect-to-login never gets a chance to run; they get a bare `403` instead. Access is still correctly denied, just inconsistently (most other login-gated views correctly redirect). A related instance of this exact pattern (`BookRatingCreateView`/`BookRatingModalView`) was fixed because it crashed with a 500 for anonymous users instead of just returning the wrong status code — see `docs/JOURNAL.md`. The remaining four are lower-severity and left for the planned permissions consolidation (`docs/RECOMMENDATIONS.md` §2 "Permissions review").
+   - ✅ `ClubBookRatingListView`'s membership check was previously dead code (it returned an `HttpResponse` from `get_queryset()`, which `ListView` silently ignored, so non-members actually got a `200`). Fixed by moving the check into `dispatch()`.
+4. **Open**: `userdashboard` app naming — URL prefix `readers/`, `app_name = "user_dashboard"`, Python package `userdashboard` — three different identifiers for one app, easy to trip over when adding new routes/links.
+5. ✅ ~~Leftover `print()` debug statements~~ — removed from `books/views.py`, `clubs/views.py`, and `books/integrations/google_books.py`. One `# TODO`-flagged behavior remains open: `Book.filter_by_authors_and_title` (used by the Google Books import dedup path) can false-positive-match a book against a *subset* of its actual authors, because `num_authors` is computed from the already-filtered join rather than the book's true author count. Documented (not fixed, to avoid silently changing dedup semantics) via `books.tests.BookModelTests.test_filter_by_authors_and_title_false_positive_on_partial_author_match`.
+6. ✅ ~~No automated test coverage~~ — 64 tests now exist across all five apps (see `docs/JOURNAL.md` for the coverage breakdown). Still open: no coverage yet for `ClubMeeting` CRUD views, `BookRating` delete flows, or the `ClubMeetingViewSet`/`LocationsViewSet` write paths beyond the basics: tests run against the real dev Postgres DB (~95s for the full suite), so a faster local/CI test-DB setup (e.g. SQLite for tests, or a dedicated lightweight Postgres) is still worth doing before this suite grows much further.
+7. ✅ ~~No `requirements.txt`/lockfile~~ — added (`requirements.txt`, `requirements-dev.txt`).
+8. **Open**: the root `templates/includes/navbar.html` has a leftover Bootstrap starter-template dropdown ("Dropdown" / "Action" / "Another action") that isn't wired to anything.

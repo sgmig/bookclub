@@ -2,15 +2,17 @@
 
 This document folds in the existing `to_do.txt` (unedited items are marked from **[to-do]**) alongside issues and gaps found while reviewing the codebase (see `docs/ARCHITECTURE.md` for the full current-state review). Grouped by priority, not by app, since most of the interesting work here cuts across apps.
 
-## 1. Bugs to fix first (small, high-impact)
+> Updated 2026-08-07: §1 has been completed and merged (branch `fix/small-bugs-and-tests`, PR #1) — full detail in `docs/JOURNAL.md`. Kept below (struck through) for the historical record; §2 and §3 are unchanged except where noted.
 
-These are broken or silently-inert today, independent of any new feature work:
+## 1. Bugs to fix first (small, high-impact) — ✅ done, merged 2026-08-07
 
-- **Fix `Club` CRUD success URLs.** `ClubCreateView`, `ClubUpdateView`, `ClubDeleteView` all do `reverse_lazy("club_list")`, but the URL is registered as `clubs:club-list`. Right now, successfully creating/editing/deleting a club raises `NoReverseMatch` instead of redirecting. Quick fix, but blocks a core flow.
-- **Fix `ClubLocation`'s uniqueness constraint.** It's declared as a bare `constraints = [...]` class attribute instead of inside `class Meta`, so Django never applies it — nothing currently stops the same location being attached to a club twice. Move it into `Meta` and add a migration.
-- **Add `LoginRequiredMixin` to the `Club` CRUD views.** Every other significant view in `clubs`/`books` requires login; `ClubListView/DetailView/CreateView/UpdateView/DeleteView` currently don't, so anonymous users can create/edit/delete clubs.
-- **Remove stray `print()` debug statements** in `books/views.py` (`BookSearchView.get`, `BookSearchViewModule.get`, `BookRatingUpdateView.get_form_kwargs`, `BookRatingModalView`) and `clubs/views.py` (`ReadingListItemAddBookView.form_valid`). Harmless but noisy, and a couple sit right next to real bugs (e.g. `BookSearchViewModule` calls `.get(...)` but `results` is only assigned inside the `if form.is_valid()` branch — a search with an invalid/empty form would raise `UnboundLocalError`. Same pattern in `google_books_search` and `ReadingListItemAddBookView.form_valid`).
-- **Commit a dependency manifest.** There's no `requirements.txt` / `pyproject.toml` in the repo — only an untracked `.djangoenv/` virtualenv. Anyone else (or CI, or a fresh clone) can't currently install the app's dependencies. `pip freeze > requirements.txt` from the existing venv is a five-minute fix; worth pinning versions deliberately rather than freezing everything, and separating dev-only tools (`ipython`, `Faker`) from runtime deps.
+- ~~**Fix `Club` CRUD success URLs.**~~ Fixed. Also uncovered and fixed a second bug in the same flow: `ClubCreateView` never set `created_by`, so the form-based create path was completely broken (`IntegrityError`) independent of the redirect issue.
+- ~~**Fix `ClubLocation`'s uniqueness constraint.**~~ Fixed and migrated.
+- ~~**Add `LoginRequiredMixin` to the `Club` CRUD views.**~~ Fixed.
+- ~~**Remove stray `print()` debug statements.**~~ Fixed, including the `UnboundLocalError` in `ReadingListItemAddBookView.form_valid`.
+- ~~**Commit a dependency manifest.**~~ Fixed — `requirements.txt` + `requirements-dev.txt`.
+
+Writing the first real test suite (§3 "Automated tests", also now done) surfaced two more small, genuine bugs that got fixed alongside the above even though they weren't on the original list: `ClubBookRatingListView`'s membership check was dead code (returned an `HttpResponse` from `get_queryset()`, which `ListView` silently ignores — non-members got a `200`, not a `403`), and `BookRatingCreateView`/`BookRatingModalView` crashed with an unhandled 500 for anonymous users on a `?book_id=` URL. See `docs/JOURNAL.md` for exact detail, and `docs/ARCHITECTURE.md` §"Notable gaps" for what's still open (a related-but-lower-severity 403-vs-redirect inconsistency on four other views, and a pre-existing `TODO`-flagged false positive in `Book.filter_by_authors_and_title`).
 
 ## 2. From `to_do.txt`, organized with context
 
@@ -51,7 +53,7 @@ These are broken or silently-inert today, independent of any new feature work:
 
 ## 3. Not in `to_do.txt`, but worth considering
 
-- **Automated tests.** Every app currently has an empty `tests.py`. Given how much of the authorization logic lives in hand-written `dispatch()` overrides (exactly the kind of code that silently breaks on refactors), this is the area most worth covering first — membership-gated views, the rating uniqueness constraint, and the `create-from-search` book dedup logic are all good, well-isolated first targets.
+- ~~**Automated tests.**~~ **[done, 2026-08-07]** 64 tests added across all five apps — models, permission checks, and the fixed views from §1 (see `docs/JOURNAL.md` for the coverage table). Still open: no coverage yet for `ClubMeeting` CRUD views, `BookRating` delete flows, or most write paths on `ClubMeetingViewSet`/`LocationsViewSet`; and the suite currently runs against the real dev Postgres DB (~95s), so a faster dedicated test-DB setup is worth doing before it grows much further.
 - **Password reset flow.** Signup/login/logout exist, but there's no "forgot password" flow — likely wanted before any real users are onboarded, and ties into the same email-sending setup needed for member invites, so worth planning together.
 - **Styled error pages / permission-denied UX.** The membership checks currently return a bare `HttpResponseForbidden("You are not allowed to view this meeting.")` — plain text, no styling, no link back anywhere. Once permissions are consolidated (see above), a small `403.html` template would make these feel intentional rather than like an error state.
 - **Clean up the starter-template navbar dropdown.** `templates/includes/navbar.html` has a leftover "Dropdown / Action / Another action" Bootstrap sample menu — either repurpose it (e.g. user account menu) or remove it.
@@ -59,8 +61,8 @@ These are broken or silently-inert today, independent of any new feature work:
 
 ## Suggested sequencing
 
-1. Bugs in §1 (all small, unblock real flows).
-2. Finish the dashboard (§2 "Dashboard view") — it's the app's front door post-login and is currently non-functional.
+1. ~~Bugs in §1~~ — done.
+2. **Next up:** finish the dashboard (§2 "Dashboard view") — it's the app's front door post-login and is currently non-functional.
 3. Meeting locations + online/in-person (§2 "Meeting creation") — directly blocks a core workflow (scheduling a meeting with a real place).
-4. Permissions consolidation (§2 "Permissions review") — do this *before* adding member invites/QR codes, since invites expand who can reach these views.
+4. Permissions consolidation (§2 "Permissions review") — do this *before* adding member invites/QR codes, since invites expand who can reach these views. Now has two concrete, test-documented targets to fix as part of it: the DRF API's missing object-level permissions, and the four views where anonymous users get a bare 403 instead of a login redirect (see `docs/ARCHITECTURE.md` §"Notable gaps" #3).
 5. Member invites → personal club structure → ratings polish → polls, roughly in that order, since each mostly builds on state the previous one introduces.
