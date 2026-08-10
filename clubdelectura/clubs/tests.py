@@ -1,9 +1,14 @@
 from datetime import timedelta
+from types import SimpleNamespace
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.request import Request
+from rest_framework.test import APIRequestFactory
 
 from accounts.models import CustomUser
 from books.models import Book, BookRating
@@ -16,6 +21,7 @@ from clubs.models import (
     ReadingList,
     ReadingListItem,
 )
+from clubs.permissions import IsClubMemberForMeeting
 from locations.models import Location
 
 
@@ -25,8 +31,10 @@ def make_user(email):
     )
 
 
-def make_club_with_member(name="Book Lovers", email="member@example.com"):
-    owner = make_user("owner@example.com")
+def make_club_with_member(
+    name="Book Lovers", email="member@example.com", owner_email="owner@example.com"
+):
+    owner = make_user(owner_email)
     club = Club.objects.create(name=name, created_by=owner)
     member = make_user(email)
     ClubMembership.objects.create(user=member, club=club)
@@ -564,6 +572,260 @@ class ReadingListItemAPITests(TestCase):
         )
 
         self.assertEqual(len(response.data), 1)
+
+
+class ReadingListItemAPIPermissionTests(TestCase):
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.outsider = make_user("outsider@example.com")
+        self.club_list = ReadingList.objects.create(
+            name="Club list", club=self.club, created_by=self.owner
+        )
+        self.personal_list = ReadingList.objects.create(
+            name="Personal list", created_by=self.owner
+        )
+        self.book = Book.objects.create(title="Dune", year=1965)
+        self.club_item = ReadingListItem.objects.create(
+            reading_list=self.club_list, book=self.book, added_by=self.owner
+        )
+        self.personal_item = ReadingListItem.objects.create(
+            reading_list=self.personal_list, book=self.book, added_by=self.owner
+        )
+
+    def test_non_member_cannot_create_item_in_club_list(self):
+        self.client.force_login(self.outsider)
+        other_book = Book.objects.create(title="1984", year=1949)
+
+        response = self.client.post(
+            reverse("clubs:api-reading-list-item-list"),
+            {"reading_list": self.club_list.pk, "book": other_book.pk},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_non_creator_cannot_create_item_in_personal_list(self):
+        self.client.force_login(self.member)
+        other_book = Book.objects.create(title="1984", year=1949)
+
+        response = self.client.post(
+            reverse("clubs:api-reading-list-item-list"),
+            {"reading_list": self.personal_list.pk, "book": other_book.pk},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_creator_can_create_item_in_personal_list(self):
+        self.client.force_login(self.owner)
+        other_book = Book.objects.create(title="1984", year=1949)
+
+        response = self.client.post(
+            reverse("clubs:api-reading-list-item-list"),
+            {"reading_list": self.personal_list.pk, "book": other_book.pk},
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+    def test_non_member_cannot_retrieve_club_item(self):
+        # 404, not 403: get_queryset() is scoped to accessible items, so a
+        # non-member's request never finds the object at all (via DRF's
+        # get_object_or_404 against that scoped queryset) - which happens
+        # before has_object_permission ever runs. This is arguably better
+        # than a 403 here: it doesn't confirm to a non-member that the
+        # object exists at all.
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(
+            reverse(
+                "clubs:api-reading-list-item-detail", kwargs={"pk": self.club_item.pk}
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_non_member_cannot_delete_club_item(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.delete(
+            reverse(
+                "clubs:api-reading-list-item-detail", kwargs={"pk": self.club_item.pk}
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(ReadingListItem.objects.filter(pk=self.club_item.pk).exists())
+
+    def test_member_can_delete_club_item(self):
+        self.client.force_login(self.member)
+
+        response = self.client.delete(
+            reverse(
+                "clubs:api-reading-list-item-detail", kwargs={"pk": self.club_item.pk}
+            )
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(ReadingListItem.objects.filter(pk=self.club_item.pk).exists())
+
+    def test_list_only_returns_accessible_items(self):
+        # outsider is neither a club member nor the personal list's creator,
+        # so `list` should return neither item - not even the club one,
+        # which used to be fully enumerable by any authenticated user.
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(reverse("clubs:api-reading-list-item-list"))
+
+        returned_ids = {row["id"] for row in response.data}
+        self.assertNotIn(self.club_item.pk, returned_ids)
+        self.assertNotIn(self.personal_item.pk, returned_ids)
+
+    def test_list_returns_items_from_own_club_and_personal_lists(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("clubs:api-reading-list-item-list"))
+
+        returned_ids = {row["id"] for row in response.data}
+        self.assertIn(self.club_item.pk, returned_ids)
+        self.assertIn(self.personal_item.pk, returned_ids)
+
+
+class ClubMeetingAPIPermissionTests(TestCase):
+    # NOTE: ClubMeetingSerializer nests `location` and `discussed_books` as
+    # writable-by-default nested serializers with no create()/update()
+    # override on the serializer or the viewset. This means POST/PUT/PATCH
+    # against this endpoint already raised an AssertionError
+    # ("`.create()` method does not support writable nested fields") before
+    # this permissions work, and still does - a pre-existing, unrelated bug,
+    # confirmed empirically while writing these tests and left unfixed here
+    # (see docs/PERMISSIONS_DESIGN.md). So `create`/`update` permission
+    # denial is tested directly (which happens before serializer validation
+    # and is unaffected by that bug), and the "member is allowed" side of
+    # `create` is tested against the permission class in isolation rather
+    # than via a full POST, since a full POST can't succeed today
+    # regardless of permissions.
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.other_club, self.other_member, _ = make_club_with_member(
+            name="Other Club",
+            email="other-member@example.com",
+            owner_email="other-owner@example.com",
+        )
+        self.outsider = make_user("outsider@example.com")
+        self.location = Location.objects.create(name="Library")
+        self.meeting = ClubMeeting.objects.create(
+            club=self.club, location=self.location, date=timezone.now()
+        )
+        self.other_meeting = ClubMeeting.objects.create(
+            club=self.other_club, location=self.location, date=timezone.now()
+        )
+
+    def test_member_can_retrieve_meeting(self):
+        self.client.force_login(self.member)
+
+        response = self.client.get(
+            reverse("clubs:api-club-meeting-detail", kwargs={"pk": self.meeting.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_member_cannot_retrieve_meeting(self):
+        # 404, not 403: same reasoning as ReadingListItemAPIPermissionTests
+        # above - get_queryset() is scoped to the user's own clubs, so a
+        # non-member's request never finds the object via the scoped
+        # get_object_or_404 lookup, before has_object_permission runs.
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(
+            reverse("clubs:api-club-meeting-detail", kwargs={"pk": self.meeting.pk})
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_non_member_cannot_delete_meeting(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.delete(
+            reverse("clubs:api-club-meeting-detail", kwargs={"pk": self.meeting.pk})
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(ClubMeeting.objects.filter(pk=self.meeting.pk).exists())
+
+    def test_member_can_delete_meeting(self):
+        self.client.force_login(self.member)
+
+        response = self.client.delete(
+            reverse("clubs:api-club-meeting-detail", kwargs={"pk": self.meeting.pk})
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(ClubMeeting.objects.filter(pk=self.meeting.pk).exists())
+
+    def test_non_member_cannot_create_meeting(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.post(
+            reverse("clubs:api-club-meeting-list"),
+            {"club": self.club.pk, "date": timezone.now().isoformat(), "notes": ""},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_cannot_create_meeting(self):
+        response = self.client.post(
+            reverse("clubs:api-club-meeting-list"),
+            {"club": self.club.pk, "date": timezone.now().isoformat(), "notes": ""},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_list_only_returns_own_clubs_meetings(self):
+        self.client.force_login(self.member)
+
+        response = self.client.get(reverse("clubs:api-club-meeting-list"))
+
+        returned_ids = {row["id"] for row in response.data}
+        self.assertIn(self.meeting.pk, returned_ids)
+        self.assertNotIn(self.other_meeting.pk, returned_ids)
+
+    def test_list_club_id_filter_cannot_leak_other_clubs_meetings(self):
+        # Passing another club's id shouldn't bypass the membership scoping.
+        self.client.force_login(self.member)
+
+        response = self.client.get(
+            reverse("clubs:api-club-meeting-list"), {"club_id": self.other_club.pk}
+        )
+
+        self.assertEqual(response.data, [])
+
+    def _create_permission_request(self, user):
+        # Request() built directly (not via APIView.initialize_request())
+        # gets an empty parser list unless passed explicitly - without this
+        # it can't parse the multipart body APIRequestFactory built. Its
+        # `.user` is also a lazy property that re-authenticates from
+        # self.authenticators (empty here, so it'd resolve to AnonymousUser)
+        # rather than reading django_request.user - must go through the
+        # Request's own `.user` setter instead, which correctly sets both.
+        factory = APIRequestFactory()
+        django_request = factory.post("/", {"club": self.club.pk})
+        request = Request(django_request, parsers=[MultiPartParser(), FormParser()])
+        request.user = user
+        return request
+
+    def test_permission_class_allows_member_to_create(self):
+        # See class docstring: a full POST can't succeed today regardless
+        # of permissions (unrelated pre-existing serializer bug), so the
+        # "member is allowed" half of create permission is tested against
+        # the permission class directly.
+        request = self._create_permission_request(self.member)
+        view = SimpleNamespace(action="create")
+
+        self.assertTrue(IsClubMemberForMeeting().has_permission(request, view))
+
+    def test_permission_class_denies_non_member_create(self):
+        request = self._create_permission_request(self.outsider)
+        view = SimpleNamespace(action="create")
+
+        self.assertFalse(IsClubMemberForMeeting().has_permission(request, view))
 
 
 class ReadingListItemRowViewTests(TestCase):
