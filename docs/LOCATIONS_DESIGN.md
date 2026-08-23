@@ -92,15 +92,16 @@ Reusing the app's existing "quick-create modal" pattern rather than inventing a 
 - **`ClubMeetingForm.location`**: extend the existing club-scoped queryset filter to also exclude redacted private locations (`is_private=True` and blank `address`) from the choices offered for *new* meetings.
 - **Migration**: add nullable `created_by` and `is_private` (default `True`) to `Location`.
 
-## Permissions (needs a decision — see below)
+## Permissions
 
-The new endpoint should check that the requesting user is actually a member of the club they're attaching a location to, before creating the `ClubLocation` link — this is a new API surface, so it should be built with that check from the start rather than inheriting the app's existing "API only checks `IsAuthenticated`" gap (tracked separately in `docs/RECOMMENDATIONS.md` §2 "Permissions review").
+Updated 2026-08-10: `docs/PERMISSIONS_DESIGN.md` landed and merged (both phases) since this doc was first written. Two things this changes:
 
-Worth noting while we're here: `ClubMeetingCreateView` itself currently has **no club-membership check at all** (only `LoginRequiredMixin`) — any logged-in user can create a meeting for any club by hitting its URL directly, not just members. That's a pre-existing gap, not something introduced by this feature, and I'd rather flag it than silently fix it mid-feature-branch (it belongs with the other permissions-consolidation work). But it's relevant context for deciding how strict to make the new location endpoint.
+- `ClubMeetingCreateView` is no longer an open concern — it now requires club membership via `ClubMemberRequiredMixin`, same as everything else. The note that used to be here about it having no check at all is resolved.
+- There's now a proven, working pattern to copy rather than build from scratch: `clubs/permissions.py::IsClubMemberForMeeting` for the template-view-adjacent DRF check, and `ClubMemberRequiredMixin` (`clubs/mixins.py`) for the new modal-loading template view. The new location-creation endpoint should follow the same shape — see the implementation plan below.
 
 ## Open questions before I implement
 
-1. **Who can add a location to a club?** Any club member (consistent with how any member can currently add reading-list items), or club admins only (`ClubMembership.is_admin` exists on the model but isn't enforced anywhere in the app today)? I'd default to **any member**, for consistency with the rest of the app's current permission granularity — but this is your call.
+1. ~~**Who can add a location to a club?**~~ — resolved by precedent. The permissions work settled on "any club member" everywhere else in the app (club update/delete, meeting CRUD, reading lists) rather than introducing the first admin-only gate. Applying the same rule here for consistency.
 2. ~~`created_by` on_delete behavior~~ — resolved, `SET_NULL`.
 3. **Should the inline-created location be usable only by this club, or should it also become visible to other clubs the user belongs to as a "suggested" location?** The ask says "automatically list it as a club location" (singular, the meeting's club) — I'm proposing exactly that and nothing more, but flagging in case you meant something broader. (Also the cleaner choice given the multi-club redaction edge case noted above.)
 4. **Should users be able to edit/deactivate a location they created** (e.g. fix a typo in the address) from anywhere yet, or is that explicitly part of the deferred dashboard tab? I'd assume the latter — no location edit UI in this branch.
@@ -111,7 +112,6 @@ Worth noting while we're here: `ClubMeetingCreateView` itself currently has **no
 
 - The dashboard "Locations" tab (deferred, per above).
 - Google Maps integration (already deferred in `docs/RECOMMENDATIONS.md`, needs coordinate fields on `Location` first).
-- Fixing `ClubMeetingCreateView`'s missing membership check (noted above, belongs to the permissions-consolidation pass).
 - Editing or deleting existing `ClubLocation` links (only creation, via the new inline flow).
 - Manual/early redaction (open question #6 above) — only the automatic on-leave trigger.
 - A dedicated "leave club" / "remove member" flow — out of scope here; the redaction signal is built to work with however membership removal happens *today* (hard delete via the admin or `ClubForm`), and to keep working if that flow is built later.
