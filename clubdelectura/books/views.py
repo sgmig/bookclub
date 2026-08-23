@@ -38,6 +38,7 @@ from dal import autocomplete
 
 from books.models import Book, Author, BookRating
 from books.forms import GoogleBooksSearchForm, BookForm, BookRatingForm
+from books.permissions import IsRatingOwnerOrReadOnly
 from books.serializers import (
     BookSerializer,
     BookRatingSerializer,
@@ -407,7 +408,7 @@ class BookViewSet(ModelViewSet):
 @extend_schema(tags=["Book Ratings"])
 class BookRatingViewSet(ModelViewSet):
     queryset = BookRating.objects.all()
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsRatingOwnerOrReadOnly]
 
     def get_serializer_class(self):
         if self.action == "create":

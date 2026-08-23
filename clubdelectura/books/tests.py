@@ -208,3 +208,72 @@ class BookViewSetCreateFromSearchTests(TestCase):
         # is checked before BasicAuthentication and doesn't set a
         # WWW-Authenticate challenge header.
         self.assertEqual(response.status_code, 403)
+
+
+class BookRatingViewSetOwnershipTests(TestCase):
+    # Regression coverage: BookRatingViewSet used to only check
+    # IsAuthenticated, with no ownership check - any authenticated user
+    # could PATCH/PUT/DELETE any other user's rating via the API.
+    def setUp(self):
+        self.owner = make_user("owner@example.com")
+        self.other_user = make_user("other@example.com")
+        self.book = Book.objects.create(title="Dune", year=1965)
+        self.rating = BookRating.objects.create(
+            book=self.book, user=self.owner, rating=8
+        )
+        self.detail_url = reverse(
+            "books:api-book-rating-detail", kwargs={"pk": self.rating.pk}
+        )
+
+    def test_owner_can_update_own_rating(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.patch(
+            self.detail_url,
+            {"rating": 9},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.rating.refresh_from_db()
+        self.assertEqual(self.rating.rating, 9)
+
+    def test_non_owner_cannot_update_rating(self):
+        self.client.force_login(self.other_user)
+
+        response = self.client.patch(
+            self.detail_url,
+            {"rating": 1},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.rating.refresh_from_db()
+        self.assertEqual(self.rating.rating, 8)
+
+    def test_non_owner_cannot_delete_rating(self):
+        self.client.force_login(self.other_user)
+
+        response = self.client.delete(self.detail_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(BookRating.objects.filter(pk=self.rating.pk).exists())
+
+    def test_owner_can_delete_own_rating(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.delete(self.detail_url)
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(BookRating.objects.filter(pk=self.rating.pk).exists())
+
+    def test_non_owner_can_still_list_and_retrieve(self):
+        # Reads stay open - ratings are meant to be visible across users,
+        # only mutation is owner-restricted.
+        self.client.force_login(self.other_user)
+
+        list_response = self.client.get(reverse("books:api-book-rating-list"))
+        detail_response = self.client.get(self.detail_url)
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)

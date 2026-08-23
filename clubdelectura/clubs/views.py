@@ -1,4 +1,5 @@
 # Generic django
+from django.db.models import Q
 from django.shortcuts import render, get_object_or_404
 
 from django.urls import reverse_lazy
@@ -15,6 +16,7 @@ from django.views.generic import (
 from django.contrib.auth.mixins import LoginRequiredMixin
 
 from clubs.mixins import ClubMemberRequiredMixin, ReadingListAccessRequiredMixin
+from clubs.permissions import IsClubMemberForMeeting, HasReadingListAccess
 
 # DRF
 from rest_framework.permissions import IsAuthenticated
@@ -358,7 +360,7 @@ class ClubBookRatingListView(ClubMemberRequiredMixin, ListView):
 @extend_schema(tags=["Reading List Items"])
 class ReadingListItemViewSet(ModelViewSet):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasReadingListAccess]
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -368,7 +370,14 @@ class ReadingListItemViewSet(ModelViewSet):
         return ReadingListItemSerializer
 
     def get_queryset(self):
-        queryset = ReadingListItem.objects.all()
+        # Scoped to reading lists the requesting user can actually access
+        # (club membership, or creatorship for personal lists) so `list`
+        # can't be used to enumerate other clubs'/users' reading list items.
+        user = self.request.user
+        queryset = ReadingListItem.objects.filter(
+            Q(reading_list__club__members=user) | Q(reading_list__created_by=user)
+        ).distinct()
+
         reading_list_id = self.request.query_params.get("reading_list_id")
         if reading_list_id:
             queryset = queryset.filter(reading_list_id=reading_list_id)
@@ -413,10 +422,13 @@ class ReadingListItemViewSet(ModelViewSet):
 @extend_schema(tags=["Club Meetings"])
 class ClubMeetingViewSet(ModelViewSet):
     serializer_class = ClubMeetingSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsClubMemberForMeeting]
 
     def get_queryset(self):
-        queryset = ClubMeeting.objects.all()
+        # Scoped to the requesting user's own clubs, regardless of the
+        # club_id filter below, so passing another club's id can't be used
+        # to enumerate its meetings via `list`.
+        queryset = ClubMeeting.objects.filter(club__members=self.request.user)
         club_id = self.request.query_params.get("club_id")
         if club_id:
             queryset = queryset.filter(club_id=club_id)
