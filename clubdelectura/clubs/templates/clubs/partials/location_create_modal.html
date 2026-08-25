@@ -15,7 +15,8 @@
     </div>
     <div class="modal-footer">
         <button type="submit" class="btn btn-primary" data-bs-dismiss="modal" id="submitLocationCreateButton"
-            data-location-create-api-url="{% url 'locations:api-location-list' %}">
+            data-location-create-api-url="{% url 'locations:api-location-list' %}"
+            data-club-location-create-api-url="{% url 'clubs:api-club-location-list' %}">
         Save
         </button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" aria-label="Close">Cancel</button>

@@ -16,7 +16,7 @@ from django.views.generic import (
 from django.contrib.auth.mixins import LoginRequiredMixin
 
 from clubs.mixins import ClubMemberRequiredMixin, ReadingListAccessRequiredMixin
-from clubs.permissions import IsClubMemberForMeeting, HasReadingListAccess
+from clubs.permissions import IsClubMember, HasReadingListAccess
 
 # DRF
 from rest_framework.permissions import IsAuthenticated
@@ -35,15 +35,25 @@ from clubs.serializers import (
     ReadingListItemSerializer,
     ReadingListItemCreateSerializer,
     ClubMeetingSerializer,
+    ClubLocationSerializer,
+    ClubLocationCreateSerializer,
 )
 
-from clubs.models import Club, ClubMeeting, ClubMembership, ReadingList, ReadingListItem
+from clubs.models import (
+    Club,
+    ClubLocation,
+    ClubMeeting,
+    ClubMembership,
+    ReadingList,
+    ReadingListItem,
+)
 
 from clubs.forms import ClubForm, ClubMeetingForm, ReadingListForm
 
 from books.models import Book, BookRating
 from books.forms import GoogleBooksSearchForm
 from books.integrations.google_books import GoogleBooksAPI
+from locations.forms import LocationForm
 
 # Create your views here.
 
@@ -361,6 +371,19 @@ class ClubBookRatingListView(ClubMemberRequiredMixin, ListView):
         return context
 
 
+class LocationCreateModalView(ClubMemberRequiredMixin, FormView):
+    form_class = LocationForm
+    template_name = "clubs/partials/location_create_modal.html"
+
+    def get_club(self):
+        return get_object_or_404(Club, id=self.kwargs["club_id"])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["club"] = self.get_club()
+        return context
+
+
 # API views
 @extend_schema(tags=["Reading List Items"])
 class ReadingListItemViewSet(ModelViewSet):
@@ -427,7 +450,7 @@ class ReadingListItemViewSet(ModelViewSet):
 @extend_schema(tags=["Club Meetings"])
 class ClubMeetingViewSet(ModelViewSet):
     serializer_class = ClubMeetingSerializer
-    permission_classes = [IsAuthenticated, IsClubMemberForMeeting]
+    permission_classes = [IsAuthenticated, IsClubMember]
 
     def get_queryset(self):
         # Scoped to the requesting user's own clubs, regardless of the
@@ -452,4 +475,54 @@ class ClubMeetingViewSet(ModelViewSet):
     )
     def list(self, request, *args, **kwargs):
         """List all reading list items, optionally filtered by `club_id`."""
+        return super().list(request, *args, **kwargs)
+
+
+@extend_schema(tags=["Club Locations"])
+class ClubLocationViewSet(ModelViewSet):
+    permission_classes = [IsAuthenticated, IsClubMember]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return ClubLocationCreateSerializer
+        return ClubLocationSerializer
+
+    def get_queryset(self):
+        # Scoped to the requesting user's own clubs, so `list` can't be used
+        # to enumerate another club's locations.
+        queryset = ClubLocation.objects.filter(club__members=self.request.user)
+        club_id = self.request.query_params.get("club_id")
+        if club_id:
+            queryset = queryset.filter(club_id=club_id)
+        return queryset
+
+    @extend_schema(
+        request=ClubLocationCreateSerializer,
+        responses={201: ClubLocationSerializer},
+    )
+    def create(self, request, *args, **kwargs):
+        # Use the CreateSerializer for input validation
+        create_serializer = self.get_serializer(data=request.data)
+        create_serializer.is_valid(raise_exception=True)
+        self.perform_create(create_serializer)
+
+        # Re-serialize the created instance using the detail serializer
+        detail_serializer = ClubLocationSerializer(
+            create_serializer.instance, context=self.get_serializer_context()
+        )
+        return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="club_id",
+                description="Filter by club ID",
+                required=False,
+                type=int,
+                location=OpenApiParameter.QUERY,
+            )
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        """List all club locations, optionally filtered by `club_id`."""
         return super().list(request, *args, **kwargs)

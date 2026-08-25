@@ -21,7 +21,7 @@ from clubs.models import (
     ReadingList,
     ReadingListItem,
 )
-from clubs.permissions import IsClubMemberForMeeting
+from clubs.permissions import IsClubMember
 from locations.models import Location
 
 
@@ -841,13 +841,13 @@ class ClubMeetingAPIPermissionTests(TestCase):
         request = self._create_permission_request(self.member)
         view = SimpleNamespace(action="create")
 
-        self.assertTrue(IsClubMemberForMeeting().has_permission(request, view))
+        self.assertTrue(IsClubMember().has_permission(request, view))
 
     def test_permission_class_denies_non_member_create(self):
         request = self._create_permission_request(self.outsider)
         view = SimpleNamespace(action="create")
 
-        self.assertFalse(IsClubMemberForMeeting().has_permission(request, view))
+        self.assertFalse(IsClubMember().has_permission(request, view))
 
 
 class ReadingListItemRowViewTests(TestCase):
@@ -885,3 +885,149 @@ class ReadingListItemRowViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+
+class MembershipRedactionSignalTests(TestCase):
+    # Tests clubs/signals.py, which calls Location.redact_for_departed_member()
+    # on ClubMembership removal/deactivation. The classmethod itself is
+    # tested directly in locations.tests.RedactForDepartedMemberTests.
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.location = Location.objects.create(
+            name="Jane's Place",
+            address="123 Main St",
+            created_by=self.member,
+            is_private=True,
+        )
+        ClubLocation.objects.create(club=self.club, location=self.location)
+
+    def test_deleting_membership_triggers_redaction(self):
+        ClubMembership.objects.get(user=self.member, club=self.club).delete()
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "")
+
+    def test_deactivating_membership_triggers_redaction(self):
+        membership = ClubMembership.objects.get(user=self.member, club=self.club)
+        membership.is_active = False
+        membership.save()
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "")
+
+    def test_saving_without_deactivating_does_not_redact(self):
+        membership = ClubMembership.objects.get(user=self.member, club=self.club)
+        membership.is_admin = True
+        membership.save()
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "123 Main St")
+
+    def test_creating_a_new_membership_does_not_redact(self):
+        outsider = make_user("outsider@example.com")
+        # Creating a membership is a save() with created=True - must not be
+        # mistaken for a deactivation.
+        ClubMembership.objects.create(user=outsider, club=self.club)
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "123 Main St")
+
+    def test_removing_membership_from_a_different_club_does_not_redact(self):
+        other_club = Club.objects.create(name="Other Club", created_by=self.owner)
+        other_membership = ClubMembership.objects.create(
+            user=self.member, club=other_club
+        )
+
+        other_membership.delete()
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "123 Main St")
+
+
+class LocationCreateModalViewTests(TestCase):
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.outsider = make_user("outsider@example.com")
+        self.url = reverse(
+            "clubs:location-create-modal", kwargs={"club_id": self.club.pk}
+        )
+
+    def test_member_can_load_modal(self):
+        self.client.force_login(self.member)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_member_forbidden(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
+
+class ClubLocationAPITests(TestCase):
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.outsider = make_user("outsider@example.com")
+        self.location = Location.objects.create(name="Member's Place", address="5 Home Rd")
+        self.list_url = reverse("clubs:api-club-location-list")
+
+    def test_member_can_link_a_location_to_their_club(self):
+        self.client.force_login(self.member)
+
+        response = self.client.post(
+            self.list_url, {"club": self.club.pk, "location": self.location.pk}
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(
+            ClubLocation.objects.filter(
+                club=self.club, location=self.location
+            ).exists()
+        )
+
+    def test_non_member_cannot_link_a_location_to_a_club(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.post(
+            self.list_url, {"club": self.club.pk, "location": self.location.pk}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            ClubLocation.objects.filter(
+                club=self.club, location=self.location
+            ).exists()
+        )
+
+    def test_anonymous_cannot_link_a_location_to_a_club(self):
+        response = self.client.post(
+            self.list_url, {"club": self.club.pk, "location": self.location.pk}
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_list_only_returns_own_clubs_locations(self):
+        other_club, other_member, _ = make_club_with_member(
+            name="Other Club",
+            email="other-member@example.com",
+            owner_email="other-owner@example.com",
+        )
+        other_location = Location.objects.create(name="Other Place")
+        ClubLocation.objects.create(club=other_club, location=other_location)
+        ClubLocation.objects.create(club=self.club, location=self.location)
+
+        self.client.force_login(self.member)
+        response = self.client.get(self.list_url)
+
+        returned_location_ids = {row["location"]["id"] for row in response.data}
+        self.assertIn(self.location.pk, returned_location_ids)
+        self.assertNotIn(other_location.pk, returned_location_ids)

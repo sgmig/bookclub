@@ -6,8 +6,16 @@ from accounts.serializers import CustomUserSerializer
 from books.models import Book
 from books.serializers import BookSerializer
 
+from locations.models import Location
 from locations.serializers import LocationSerializer
-from clubs.models import Club, ClubMembership, ClubMeeting, ReadingList, ReadingListItem
+from clubs.models import (
+    Club,
+    ClubLocation,
+    ClubMembership,
+    ClubMeeting,
+    ReadingList,
+    ReadingListItem,
+)
 
 
 class ClubSerializer(serializers.ModelSerializer):
@@ -60,6 +68,29 @@ class ReadingListItemCreateSerializer(serializers.ModelSerializer):
             "reading_list",
             "book",
         ]
+
+
+# Club Location Serializers
+class ClubLocationSerializer(serializers.ModelSerializer):
+
+    location = LocationSerializer()
+
+    class Meta:
+        model = ClubLocation
+        fields = ["id", "club", "location"]
+
+
+class ClubLocationCreateSerializer(serializers.ModelSerializer):
+
+    # Both reference existing objects - creating the Location itself is a
+    # separate call to the locations app's own API. This endpoint only
+    # creates the link between an existing Location and an existing Club.
+    club = serializers.PrimaryKeyRelatedField(queryset=Club.objects.all())
+    location = serializers.PrimaryKeyRelatedField(queryset=Location.objects.all())
+
+    class Meta:
+        model = ClubLocation
+        fields = ["club", "location"]
 
 
 # Club Meetings Serializer

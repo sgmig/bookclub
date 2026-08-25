@@ -37,36 +37,70 @@ function bindLocationCreateSubmitButton() {
 
   submitButton.addEventListener("click", function (e) {
     e.preventDefault();
-    const submitUrl = this.getAttribute("data-location-create-api-url");
+    const locationApiUrl = this.getAttribute("data-location-create-api-url");
+    const clubLocationApiUrl = this.getAttribute(
+      "data-club-location-create-api-url"
+    );
 
     const form = document.getElementById("locationCreateForm");
-    const formData = new FormData(form);
+    const clubId = form.elements["club"].value;
 
-    // Calling API. CSRF token is included in formData.
-    fetch(submitUrl, {
-      method: "POST",
-      body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        "X-CSRFToken": getCSRFToken(),
-      },
-      mode: "same-origin",
-    })
-      .then((response) => {
-        if (response.ok) {
-          return response.json();
-        } else {
-          throw new Error(`Request failed with status ${response.status}`);
-        }
-      })
-      .then((data) => {
-        addLocationToDropdown(data);
+    // The Location itself and its link to the club are two separate
+    // resources (Location lives in the locations app, ClubLocation in
+    // clubs), so this is two calls: create the Location, then link it.
+    const formData = new FormData(form);
+    formData.delete("club");
+
+    createLocation(locationApiUrl, formData)
+      .then((location) =>
+        linkLocationToClub(clubLocationApiUrl, clubId, location).then(
+          () => location
+        )
+      )
+      .then((location) => {
+        addLocationToDropdown(location);
         showBootstrapToast("Location added successfully.");
       })
       .catch((error) => {
-        console.error("Error submitting location:", error);
+        console.error("Error adding location:", error);
         showBootstrapToast("An unexpected error occurred.", true);
       });
+  });
+}
+
+function createLocation(locationApiUrl, formData) {
+  // CSRF token is included in formData.
+  return fetch(locationApiUrl, {
+    method: "POST",
+    body: formData,
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+      "X-CSRFToken": getCSRFToken(),
+    },
+    mode: "same-origin",
+  }).then((response) => {
+    if (!response.ok) {
+      throw new Error(`Location creation failed with status ${response.status}`);
+    }
+    return response.json();
+  });
+}
+
+function linkLocationToClub(clubLocationApiUrl, clubId, location) {
+  return fetch(clubLocationApiUrl, {
+    method: "POST",
+    body: JSON.stringify({ club: clubId, location: location.id }),
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+      "X-CSRFToken": getCSRFToken(),
+    },
+    mode: "same-origin",
+  }).then((response) => {
+    if (!response.ok) {
+      throw new Error(`Linking location to club failed with status ${response.status}`);
+    }
+    return response.json();
   });
 }
 

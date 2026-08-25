@@ -1,7 +1,6 @@
 from rest_framework import serializers
 
 from accounts.serializers import CustomUserSerializer
-from clubs.models import Club
 from locations.models import Location
 
 
@@ -22,15 +21,7 @@ class LocationSerializer(serializers.ModelSerializer):
 
 
 class LocationCreateSerializer(serializers.ModelSerializer):
-    """Serializer for Location model used in Creation.
-
-    `club` is write-only: if provided, the created location is also linked
-    to that club via ClubLocation (see LocationsViewSet.perform_create).
-    """
-
-    club = serializers.PrimaryKeyRelatedField(
-        queryset=Club.objects.all(), required=False, write_only=True
-    )
+    """Serializer for Location model used in Creation."""
 
     class Meta:
         model = Location
@@ -40,5 +31,4 @@ class LocationCreateSerializer(serializers.ModelSerializer):
             "address",
             "access_details",
             "is_private",
-            "club",
         ]
