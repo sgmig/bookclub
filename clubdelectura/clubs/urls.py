@@ -37,8 +37,10 @@ from clubs.views import (
     ClubMeetingUpdateView,
     ClubMeetingDeleteView,
     ClubMeetingPartialDetailView,
+    LocationCreateModalView,
     ReadingListItemViewSet,
     ClubMeetingViewSet,
+    ClubLocationViewSet,
 )
 
 from rest_framework.routers import DefaultRouter
@@ -57,6 +59,7 @@ router.register(
     "reading-list-item", ReadingListItemViewSet, basename="api-reading-list-item"
 )
 router.register("club-meeting", ClubMeetingViewSet, basename="api-club-meeting")
+router.register("club-location", ClubLocationViewSet, basename="api-club-location")
 
 urlpatterns = [
     path("", ClubListView.as_view(), name="club-list"),
@@ -113,6 +116,11 @@ urlpatterns = [
         "<int:club_id>/club-meeting/create/",
         ClubMeetingCreateView.as_view(),
         name="club-meeting-create",
+    ),
+    path(
+        "<int:club_id>/location/create-modal/",
+        LocationCreateModalView.as_view(),
+        name="location-create-modal",
     ),
     path(
         "club-meeting/<int:pk>/",

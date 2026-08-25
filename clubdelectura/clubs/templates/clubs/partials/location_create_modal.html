@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+
+{{ form.media }}
+
+<div class="modal-header">
+    <h5 class="modal-title" id="locationCreateModalLabel">Add Location</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<form id="locationCreateForm">
+    {% csrf_token %}
+    {% load crispy_forms_tags %}
+    <input type="hidden" name="club" value="{{ club.id }}">
+    <div class="modal-body">
+        {{ form|crispy }}
+    </div>
+    <div class="modal-footer">
+        <button type="submit" class="btn btn-primary" data-bs-dismiss="modal" id="submitLocationCreateButton"
+            data-location-create-api-url="{% url 'locations:api-location-list' %}"
+            data-club-location-create-api-url="{% url 'clubs:api-club-location-list' %}">
+        Save
+        </button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" aria-label="Close">Cancel</button>
+    </div>
+</form>

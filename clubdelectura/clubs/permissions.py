@@ -3,10 +3,12 @@ from rest_framework.permissions import BasePermission
 from clubs.models import Club, ReadingList
 
 
-class IsClubMemberForMeeting(BasePermission):
-    """Require the requesting user to belong to the meeting's club.
+class IsClubMember(BasePermission):
+    """Require the requesting user to belong to the object's club.
 
-    Mirrors ClubMemberRequiredMixin (clubs/mixins.py) for the DRF layer.
+    Works for any model exposing a direct `club` FK/field - ClubMeeting and
+    ClubLocation both do. Mirrors ClubMemberRequiredMixin (clubs/mixins.py)
+    for the DRF layer.
     """
 
     message = "You are not a member of this club."

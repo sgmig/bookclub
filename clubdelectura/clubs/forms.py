@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -117,4 +118,10 @@ class ClubMeetingForm(forms.ModelForm):
                 id__in=ClubLocation.objects.filter(club=club).values_list(
                     "location", flat=True
                 )
+            ).exclude(
+                # Redacted private locations (creator left the club, address
+                # cleared - see Location.redact_for_departed_member) can't
+                # host new meetings, since nobody has the address anymore.
+                Q(is_private=True)
+                & (Q(address__isnull=True) | Q(address=""))
             )

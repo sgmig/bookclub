@@ -21,7 +21,7 @@ from clubs.models import (
     ReadingList,
     ReadingListItem,
 )
-from clubs.permissions import IsClubMemberForMeeting
+from clubs.permissions import IsClubMember
 from locations.models import Location
 
 
@@ -488,16 +488,38 @@ class ClubMeetingFormLocationTests(TestCase):
         club, member, owner = make_club_with_member()
         other_club = Club.objects.create(name="Other Club", created_by=owner)
 
-        club_location = Location.objects.create(name="Library")
+        club_location = Location.objects.create(
+            name="Library", address="1 Book Rd", is_private=False
+        )
         ClubLocation.objects.create(club=club, location=club_location)
 
-        unrelated_location = Location.objects.create(name="Unrelated Cafe")
+        unrelated_location = Location.objects.create(
+            name="Unrelated Cafe", address="2 Coffee Rd", is_private=False
+        )
         ClubLocation.objects.create(club=other_club, location=unrelated_location)
 
         form = ClubMeetingForm(club=club)
 
         self.assertIn(club_location, form.fields["location"].queryset)
         self.assertNotIn(unrelated_location, form.fields["location"].queryset)
+
+    def test_redacted_private_location_excluded_from_choices(self):
+        club, member, owner = make_club_with_member()
+
+        redacted_location = Location.objects.create(
+            name="Jane's Place", address="", is_private=True, created_by=member
+        )
+        ClubLocation.objects.create(club=club, location=redacted_location)
+
+        still_usable_location = Location.objects.create(
+            name="Library", address="1 Book Rd", is_private=False
+        )
+        ClubLocation.objects.create(club=club, location=still_usable_location)
+
+        form = ClubMeetingForm(club=club)
+
+        self.assertNotIn(redacted_location, form.fields["location"].queryset)
+        self.assertIn(still_usable_location, form.fields["location"].queryset)
 
 
 class ClubBookRatingListViewTests(TestCase):
@@ -819,13 +841,13 @@ class ClubMeetingAPIPermissionTests(TestCase):
         request = self._create_permission_request(self.member)
         view = SimpleNamespace(action="create")
 
-        self.assertTrue(IsClubMemberForMeeting().has_permission(request, view))
+        self.assertTrue(IsClubMember().has_permission(request, view))
 
     def test_permission_class_denies_non_member_create(self):
         request = self._create_permission_request(self.outsider)
         view = SimpleNamespace(action="create")
 
-        self.assertFalse(IsClubMemberForMeeting().has_permission(request, view))
+        self.assertFalse(IsClubMember().has_permission(request, view))
 
 
 class ReadingListItemRowViewTests(TestCase):
@@ -863,3 +885,170 @@ class ReadingListItemRowViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+
+class MembershipRedactionSignalTests(TestCase):
+    # Tests clubs/signals.py, which calls Location.redact_for_departed_member()
+    # on ClubMembership removal/deactivation. The classmethod itself is
+    # tested directly in locations.tests.RedactForDepartedMemberTests.
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.location = Location.objects.create(
+            name="Jane's Place",
+            address="123 Main St",
+            created_by=self.member,
+            is_private=True,
+        )
+        ClubLocation.objects.create(club=self.club, location=self.location)
+
+    def test_deleting_membership_triggers_redaction(self):
+        ClubMembership.objects.get(user=self.member, club=self.club).delete()
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "")
+
+    def test_deactivating_membership_triggers_redaction(self):
+        membership = ClubMembership.objects.get(user=self.member, club=self.club)
+        membership.is_active = False
+        membership.save()
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "")
+
+    def test_saving_without_deactivating_does_not_redact(self):
+        membership = ClubMembership.objects.get(user=self.member, club=self.club)
+        membership.is_admin = True
+        membership.save()
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "123 Main St")
+
+    def test_creating_a_new_membership_does_not_redact(self):
+        outsider = make_user("outsider@example.com")
+        # Creating a membership is a save() with created=True - must not be
+        # mistaken for a deactivation.
+        ClubMembership.objects.create(user=outsider, club=self.club)
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "123 Main St")
+
+    def test_removing_membership_from_a_different_club_does_not_redact(self):
+        other_club = Club.objects.create(name="Other Club", created_by=self.owner)
+        other_membership = ClubMembership.objects.create(
+            user=self.member, club=other_club
+        )
+
+        other_membership.delete()
+
+        self.location.refresh_from_db()
+        self.assertEqual(self.location.address, "123 Main St")
+
+
+class LocationCreateModalViewTests(TestCase):
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.outsider = make_user("outsider@example.com")
+        self.url = reverse(
+            "clubs:location-create-modal", kwargs={"club_id": self.club.pk}
+        )
+
+    def test_member_can_load_modal(self):
+        self.client.force_login(self.member)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_member_forbidden(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
+
+class ClubLocationAPITests(TestCase):
+    def setUp(self):
+        self.club, self.member, self.owner = make_club_with_member()
+        self.outsider = make_user("outsider@example.com")
+        self.location = Location.objects.create(name="Member's Place", address="5 Home Rd")
+        self.list_url = reverse("clubs:api-club-location-list")
+
+    def test_member_can_link_a_location_to_their_club(self):
+        self.client.force_login(self.member)
+
+        response = self.client.post(
+            self.list_url, {"club": self.club.pk, "location": self.location.pk}
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(
+            ClubLocation.objects.filter(
+                club=self.club, location=self.location
+            ).exists()
+        )
+
+    def test_non_member_cannot_link_a_location_to_a_club(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.post(
+            self.list_url, {"club": self.club.pk, "location": self.location.pk}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            ClubLocation.objects.filter(
+                club=self.club, location=self.location
+            ).exists()
+        )
+
+    def test_anonymous_cannot_link_a_location_to_a_club(self):
+        response = self.client.post(
+            self.list_url, {"club": self.club.pk, "location": self.location.pk}
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_list_only_returns_own_clubs_locations(self):
+        other_club, other_member, _ = make_club_with_member(
+            name="Other Club",
+            email="other-member@example.com",
+            owner_email="other-owner@example.com",
+        )
+        other_location = Location.objects.create(name="Other Place")
+        ClubLocation.objects.create(club=other_club, location=other_location)
+        ClubLocation.objects.create(club=self.club, location=self.location)
+
+        self.client.force_login(self.member)
+        response = self.client.get(self.list_url)
+
+        returned_location_ids = {row["location"]["id"] for row in response.data}
+        self.assertIn(self.location.pk, returned_location_ids)
+        self.assertNotIn(other_location.pk, returned_location_ids)
+
+    def test_patch_does_not_crash_on_nested_location_field(self):
+        # Regression test: ClubLocationSerializer.location is nested
+        # (LocationSerializer), and is the fallback serializer for
+        # update/partial_update. Without read_only=True on that field, a
+        # PATCH including `location` would hit the same "doesn't support
+        # writable nested fields" AssertionError as ClubMeetingSerializer.
+        club_location = ClubLocation.objects.create(
+            club=self.club, location=self.location
+        )
+        self.client.force_login(self.member)
+
+        response = self.client.patch(
+            reverse(
+                "clubs:api-club-location-detail", kwargs={"pk": club_location.pk}
+            ),
+            {"location": self.location.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
