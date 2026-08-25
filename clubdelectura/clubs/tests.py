@@ -488,16 +488,38 @@ class ClubMeetingFormLocationTests(TestCase):
         club, member, owner = make_club_with_member()
         other_club = Club.objects.create(name="Other Club", created_by=owner)
 
-        club_location = Location.objects.create(name="Library")
+        club_location = Location.objects.create(
+            name="Library", address="1 Book Rd", is_private=False
+        )
         ClubLocation.objects.create(club=club, location=club_location)
 
-        unrelated_location = Location.objects.create(name="Unrelated Cafe")
+        unrelated_location = Location.objects.create(
+            name="Unrelated Cafe", address="2 Coffee Rd", is_private=False
+        )
         ClubLocation.objects.create(club=other_club, location=unrelated_location)
 
         form = ClubMeetingForm(club=club)
 
         self.assertIn(club_location, form.fields["location"].queryset)
         self.assertNotIn(unrelated_location, form.fields["location"].queryset)
+
+    def test_redacted_private_location_excluded_from_choices(self):
+        club, member, owner = make_club_with_member()
+
+        redacted_location = Location.objects.create(
+            name="Jane's Place", address="", is_private=True, created_by=member
+        )
+        ClubLocation.objects.create(club=club, location=redacted_location)
+
+        still_usable_location = Location.objects.create(
+            name="Library", address="1 Book Rd", is_private=False
+        )
+        ClubLocation.objects.create(club=club, location=still_usable_location)
+
+        form = ClubMeetingForm(club=club)
+
+        self.assertNotIn(redacted_location, form.fields["location"].queryset)
+        self.assertIn(still_usable_location, form.fields["location"].queryset)
 
 
 class ClubBookRatingListViewTests(TestCase):

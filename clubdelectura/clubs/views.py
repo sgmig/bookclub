@@ -306,6 +306,11 @@ class ClubMeetingUpdateView(ClubMemberRequiredMixin, UpdateView):
     def get_club(self):
         return self.get_object().club
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["club"] = self.get_club()
+        return context
+
     def get_form_kwargs(self):
         # Get the default kwargs for the form and add the 'club' instance
         kwargs = super().get_form_kwargs()

@@ -1,6 +1,6 @@
 # Design: create meeting locations "on the fly"
 
-Branch: `feature/meeting-location-creation`. Design-only — no code changes yet.
+Branch: `feature/meeting-location-creation`. **✅ Implemented 2026-08-25**, built as designed below — see "Implementation notes" near the end for exactly what shipped, two bugs found along the way, and a couple of "better way, later" ideas per your instruction not to build them now.
 
 ## The ask
 
@@ -103,10 +103,10 @@ Updated 2026-08-10: `docs/PERMISSIONS_DESIGN.md` landed and merged (both phases)
 
 1. ~~**Who can add a location to a club?**~~ — resolved by precedent. The permissions work settled on "any club member" everywhere else in the app (club update/delete, meeting CRUD, reading lists) rather than introducing the first admin-only gate. Applying the same rule here for consistency.
 2. ~~`created_by` on_delete behavior~~ — resolved, `SET_NULL`.
-3. **Should the inline-created location be usable only by this club, or should it also become visible to other clubs the user belongs to as a "suggested" location?** The ask says "automatically list it as a club location" (singular, the meeting's club) — I'm proposing exactly that and nothing more, but flagging in case you meant something broader. (Also the cleaner choice given the multi-club redaction edge case noted above.)
-4. **Should users be able to edit/deactivate a location they created** (e.g. fix a typo in the address) from anywhere yet, or is that explicitly part of the deferred dashboard tab? I'd assume the latter — no location edit UI in this branch.
-5. **Redaction scope: `address` + `access_details` + `description`, or just the first two?** I'm proposing all three get cleared (any of them could end up holding something personal — e.g. "buzzer code 1234" could land in `description` just as easily as `access_details`), keeping only `name`. Confirm that's not over-clearing for your intent.
-6. **Should a club admin (or the location's creator, before they leave) be able to manually mark a private location as redacted/retired early** — e.g. "we don't meet at Jane's anymore" without her actually leaving the club? Not building this now (no such UI exists for anything in the app yet), but flagging since it's the natural next ask once redaction-on-leaving exists.
+3. ~~Should the inline-created location be usable only by this club, or also visible to other clubs?~~ — went with "only this club" as designed (matches the ask literally, and avoids the multi-club redaction edge case). No decision needed before implementing since nobody pushed back.
+4. ~~Should users be able to edit/deactivate a location they created?~~ — no, no location edit UI built in this branch, as planned. Still deferred to the dashboard tab.
+5. ~~Redaction scope~~ — implemented as `address` + `access_details` + `description` all cleared, keeping only `name`, as proposed.
+6. ~~Manual early redaction~~ — not built, as planned. Still a candidate future ask.
 
 ## Non-goals for this branch
 
@@ -115,3 +115,19 @@ Updated 2026-08-10: `docs/PERMISSIONS_DESIGN.md` landed and merged (both phases)
 - Editing or deleting existing `ClubLocation` links (only creation, via the new inline flow).
 - Manual/early redaction (open question #6 above) — only the automatic on-leave trigger.
 - A dedicated "leave club" / "remove member" flow — out of scope here; the redaction signal is built to work with however membership removal happens *today* (hard delete via the admin or `ClubForm`), and to keep working if that flow is built later.
+
+## Implementation notes (2026-08-25)
+
+Built exactly as designed above — mixins/permissions reused directly rather than rebuilt, Create/Detail serializer split matching `BookRatingViewSet`/`ReadingListItemViewSet`, modal markup and JS mirroring the book-rating modal's fetch-inject-show / fetch-submit shape down to the naming conventions (`open-*-modal-btn` class, `data-*-modal-url`/`data-*-api-url` attributes, `#*ModalContent` injection target). Verified end-to-end with a real browser (Playwright, driven headless) — login → open meeting form → "+ Add new location" → fill modal → submit → new option appears selected in the dropdown → submitting the meeting form itself succeeds — screenshots and script in the session scratchpad if useful later.
+
+**Two real bugs found and fixed along the way, not part of the original design:**
+1. `Location.is_private` had no `blank=True`, so its auto-generated form checkbox defaulted to `required=True` — a user could check it but never *uncheck* it (mark a location public) without hitting a validation error. Added `blank=True` (new migration `0003_alter_location_is_private`; `blank` has no DB-level effect, but Django still tracks it in migration state).
+2. An existing test (`ClubMeetingFormLocationTests.test_location_choices_limited_to_club_locations`) built its fixture location with no address, which — now that `is_private` defaults to `True` — made it look exactly like a redacted location and get correctly excluded by the new queryset filter. Fixed the fixture (gave it a real address and explicit `is_private=False`), not the filter; the filter was doing exactly what it's supposed to.
+
+**Deviated from the original sketch in one place**: the club-scoped location-creation permission check ended up in `locations/permissions.py` (not `clubs/permissions.py` as originally sketched), to match the actual established precedent once I looked closely — `books/permissions.py::IsRatingOwnerOrReadOnly` lives in the app that *owns the model/viewset being protected*, not the app that owns the underlying "club membership" concept. `LocationsViewSet` lives in `locations`, so its permission class does too.
+
+### Ideas for later, not built here (per your instruction — documenting rather than doing)
+
+- **The "dismiss on click, before the response comes back" modal pattern has a real UX gap, and I just replicated it rather than fixing it.** Every quick-create modal in this app (book rating, and now this one) puts `data-bs-dismiss="modal"` directly on the Save button, so the modal closes immediately regardless of whether the API call actually succeeds — a validation failure just shows a generic toast ("An unexpected error occurred") with no way to see what was wrong or fix and resubmit without reopening the modal from scratch. Worth fixing app-wide at some point: wait for a successful response before dismissing, and surface field-level errors inline in the modal on failure. Didn't fix it here since the instruction was to match the existing pattern, not improve it — but it's the same gap in both places now, so worth doing once, everywhere.
+- **The fetch-modal / fetch-submit JS is copy-pasted per feature** (`book_rating_list_buttons.js`, now `location_create_modal.js`) with near-identical open/inject/show and submit/fetch/toast logic, differing only in element IDs and URLs. A small shared utility (e.g. `openFetchModal(triggerSelector, contentUrl, contentElId, modalElId)` / `bindModalSubmit(buttonId, formId, onSuccess)`) would remove most of that duplication for whatever quick-create modal comes next. Three occurrences of the same shape (rating, reading-list-item search, now location) feels like the point where extracting it stops being premature.
+- **First use of Django signals in this codebase** — there was no existing convention to match for "react to a model change elsewhere," so `clubs/signals.py` uses the standard idiomatic approach (`pre_save`+`post_save` pairing to detect a field flip, `post_delete` for the hard-delete path), wired via `AppConfig.ready()`. Flagging simply because it's a new mechanism in the app, not because it's uncertain — `post_delete`/`post_save` are the only way to reliably catch admin bulk-deletes and queryset-level `.delete()` calls, which a `Model.delete()` override would miss.

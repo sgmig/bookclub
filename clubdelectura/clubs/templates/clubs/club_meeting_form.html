@@ -10,10 +10,14 @@
 {{ form.media }}
 {% endblock %}
 
+{% block extra_js %}
+<script type="module" src="{% static 'clubs/js/location_create_modal.js' %}"></script>
+{% endblock %}
+
 
 {% block content %}
 <div class="container">
-    <h1 class="mb-4">  
+    <h1 class="mb-4">
     {% if club_meeting %}
         {{ club_meeting.club.name }} meeting
     {% else %}
@@ -28,13 +32,21 @@
             {{ form.date|as_crispy_field }}
         </div>
         <!-- Location -->
-        <div class="mb-3">
-            {{ form.location|as_crispy_field }}
+        <div class="row mb-3 d-flex align-items-end">
+            <div class="col-md-10 col-12">
+                {{ form.location|as_crispy_field }}
+            </div>
+            <div class="col-md-2 col-12">
+                <button type="button" class="btn btn-sm btn-outline-primary mt-1 mb-3 w-100 open-location-create-modal-btn"
+                    data-location-create-modal-url="{% url 'clubs:location-create-modal' club_id=club.id %}">
+                    + Add new location
+                </button>
+            </div>
         </div>
         <!-- Books to discuss -->
         <div class="row mb-3 d-flex align-items-end">
             <div class="col-md-10 col-12">
-                {{ form.discussed_books|as_crispy_field }}  
+                {{ form.discussed_books|as_crispy_field }}
             </div>
             <div class="col-md-2 col-12">
                 <button type="button" class="btn btn-sm btn-outline-primary mt-1 mb-3 w-100" data-bs-toggle="modal" data-bs-target="#">
@@ -49,5 +61,15 @@
     </div>
     <button class="btn btn-primary" type="submit">Update meeting</button>
 </form>
+</div>
+
+<!-- Create location modal. Content is fetched dynamically. -->
+<div class="modal fade" id="locationCreateModal" aria-labelledby="locationCreateModalLabel" aria-hidden="true"
+        tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" id="locationCreateModalContent">
+      <!-- Content will be loaded here dynamically -->
+    </div>
+  </div>
 </div>
 {% endblock %}
