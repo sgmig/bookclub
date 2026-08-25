@@ -1031,3 +1031,24 @@ class ClubLocationAPITests(TestCase):
         returned_location_ids = {row["location"]["id"] for row in response.data}
         self.assertIn(self.location.pk, returned_location_ids)
         self.assertNotIn(other_location.pk, returned_location_ids)
+
+    def test_patch_does_not_crash_on_nested_location_field(self):
+        # Regression test: ClubLocationSerializer.location is nested
+        # (LocationSerializer), and is the fallback serializer for
+        # update/partial_update. Without read_only=True on that field, a
+        # PATCH including `location` would hit the same "doesn't support
+        # writable nested fields" AssertionError as ClubMeetingSerializer.
+        club_location = ClubLocation.objects.create(
+            club=self.club, location=self.location
+        )
+        self.client.force_login(self.member)
+
+        response = self.client.patch(
+            reverse(
+                "clubs:api-club-location-detail", kwargs={"pk": club_location.pk}
+            ),
+            {"location": self.location.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)

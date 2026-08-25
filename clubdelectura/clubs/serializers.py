@@ -72,8 +72,18 @@ class ReadingListItemCreateSerializer(serializers.ModelSerializer):
 
 # Club Location Serializers
 class ClubLocationSerializer(serializers.ModelSerializer):
+    """Read/detail serializer - also the fallback for update/partial_update.
 
-    location = LocationSerializer()
+    location is read_only here: nested serializers aren't writable without
+    a custom update(), and there's no UI or need to change which Location a
+    ClubLocation points to after creation (only .club/.location themselves
+    get edited by deleting and recreating the link, which this branch
+    doesn't build UI for either - see docs/LOCATIONS_DESIGN.md non-goals).
+    Without this, a PATCH/PUT including `location` would hit the same
+    "doesn't support writable nested fields" crash as ClubMeetingSerializer.
+    """
+
+    location = LocationSerializer(read_only=True)
 
     class Meta:
         model = ClubLocation
