@@ -1,8 +1,9 @@
 # Plan: require club membership for club-scoped interactions
 
-Two branches, in order:
+Three branches, in order:
 1. `feature/club-membership-template-views` — Django template views. ✅ Done, merged 2026-08-07 (PR #2).
 2. `feature/club-membership-drf-api` — DRF viewsets. ✅ Done, implemented 2026-08-10 — see "Phase 2" below for what actually shipped (a couple of things changed from the original sketch once written against the real code).
+3. `fix/permissions-backlog-cleanup` — 📋 Planned, not yet implemented (2026-08-30) — three items that accumulated in `docs/RECOMMENDATIONS.md` §"Permissions review" across Phase 2 and `feature/meeting-location-creation`. See "Phase 3" below; one item (`Book` deletion policy) needs a decision before it's built.
 
 This supersedes the "Permissions review" paragraph in `docs/RECOMMENDATIONS.md` §2 with an actual plan. It was also a prerequisite for `feature/meeting-location-creation` (parked, see `docs/LOCATIONS_DESIGN.md`) — that branch can now resume, since both the template views and the API it depends on enforce membership correctly.
 
@@ -151,3 +152,93 @@ Applied as `permission_classes = [IsAuthenticated, IsClubMemberForMeeting]` / `[
 ### Testing
 
 24 new tests across `clubs/tests.py` (`ReadingListItemAPIPermissionTests`, `ClubMeetingAPIPermissionTests`) and `books/tests.py` (`BookRatingViewSetOwnershipTests`) — 108 total, up from 85. Covers: create permission (member/non-member/creator/non-creator, plus anonymous), retrieve/destroy (member/non-member → 404 per the note above), and `list` queryset scoping (own data returned, other clubs'/users' data excluded even when explicitly requested via query params).
+
+## Phase 3 — plan (`fix/permissions-backlog-cleanup`)
+
+Three items accumulated in `docs/RECOMMENDATIONS.md` §"Permissions review" across Phase 2 and `feature/meeting-location-creation`. Bundling them into one branch since all three are small and in the same neighborhood of code.
+
+### 1. Update/`partial_update` don't re-validate a *new* club/reading-list in the payload
+
+**The gap**: `IsClubMember.has_permission` only inspects `request.data.get("club")` when `view.action == "create"`. For `update`/`partial_update`, it returns `True` unconditionally, and `has_object_permission` only checks the object's *existing* `.club` — never the new value being written. So a member of club A could `PATCH` an existing `ClubMeeting` or `ClubLocation` they belong to, setting `club` to club B, and nothing would stop it (they don't need to belong to club B). Same shape of gap in `HasReadingListAccess` for the `reading_list` field on `ReadingListItemViewSet`.
+
+**Fix**: extend `has_permission` to run the same club-membership check for `update`/`partial_update` too, but only when the payload actually includes a `club` (or `reading_list`) key — if it's absent, nothing's being re-targeted, so `has_object_permission`'s existing-object check is sufficient on its own.
+
+```python
+class IsClubMember(BasePermission):
+    def has_permission(self, request, view):
+        if view.action not in ("create", "update", "partial_update"):
+            return True
+        club_id = request.data.get("club")
+        if not club_id:
+            # create requires a club; update/partial_update without one
+            # just isn't re-targeting - has_object_permission covers it.
+            return view.action != "create"
+        return self._is_member(request.user, club_id)
+
+    def has_object_permission(self, request, view, obj):
+        return request.user in obj.club.members.all()
+
+    @staticmethod
+    def _is_member(user, club_id):
+        try:
+            club = Club.objects.get(pk=club_id)
+        except (Club.DoesNotExist, ValueError, TypeError):
+            return False
+        return user in club.members.all()
+```
+
+Same restructuring for `HasReadingListAccess`, keyed on `reading_list` instead of `club`, reusing its existing `_has_access` staticmethod. Covers `ClubMeetingViewSet`, `ClubLocationViewSet` (both via `IsClubMember`), and `ReadingListItemViewSet` (via `HasReadingListAccess`) with one change each.
+
+**Tests to add**: member can't `PATCH` `club`/`reading_list` on an object they own to a club/list they don't belong to (for all three viewsets); member *can* still `PATCH` unrelated fields without re-sending `club`/`reading_list`; existing create-permission tests should be unaffected (behavior there doesn't change).
+
+### 2. `ClubMeetingSerializer` create/update crash (the actual bug, not just a permissions gap)
+
+**The bug**: `ClubMeetingSerializer` nests `location` (`LocationSerializer()`) and `discussed_books` (`ReadingListItemSerializer(many=True)`) as writable-by-default, with no `create()`/`update()` override — confirmed empirically in Phase 2 that any valid `POST`/`PUT`/`PATCH` against `/clubs/api/club-meeting/` raises `AssertionError: The .create() method does not support writable nested fields by default`. `ClubMeetingViewSet` has never had a working create or update via the API.
+
+**Fix**: the same Create/Detail serializer split already used by `ReadingListItemViewSet`/`BookRatingViewSet`/`ClubLocationViewSet`:
+
+```python
+class ClubMeetingCreateSerializer(serializers.ModelSerializer):
+    club = serializers.PrimaryKeyRelatedField(queryset=Club.objects.all())
+    location = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(), required=False, allow_null=True
+    )
+    discussed_books = serializers.PrimaryKeyRelatedField(
+        queryset=ReadingListItem.objects.all(), many=True, required=False
+    )
+
+    class Meta:
+        model = ClubMeeting
+        fields = ["club", "date", "location", "discussed_books", "notes"]
+```
+
+`ClubMeetingViewSet.get_serializer_class()` routes `create`/`update`/`partial_update` to `ClubMeetingCreateSerializer` and `retrieve`/`list` to the existing `ClubMeetingSerializer` (nested, read-only in practice now that nothing writes through it) — going one step further than the `ReadingListItemViewSet`/`BookRatingViewSet` precedent, which only branches on `create` and leaves `update` on the nested Detail serializer. Worth doing here since fixing `update` too costs nothing extra once the Create serializer exists.
+
+`create()` override re-serializes the response with the Detail serializer for the rich nested output, matching the existing pattern.
+
+**Found while writing this plan, not part of this fix**: `BookRatingSerializer`/`ReadingListItemSerializer` have the identical latent issue for a full `PUT` (not `PATCH`) — their `get_serializer_class()` only special-cases `create`, so `update`/`partial_update` fall through to the nested Detail serializer. A `PATCH` with only non-nested fields (e.g. `{"rating": 9}`) works fine — which is all that's tested and all the app's own JS ever sends — but a full `PUT` including the nested field would crash the same way. Not touched here (nothing in the app sends a full `PUT` to either endpoint today, and it's outside the three items actually on the backlog) — flagging for the backlog rather than expanding this branch's scope.
+
+**Tests to add**: successful `create` via the API (previously impossible to test at all — permission-denial was tested, but "member succeeds" never was); successful `update`/`partial_update`; existing permission tests should keep passing unchanged.
+
+### 3. `Book` deletion policy — needs your call
+
+**The gap**: `BookViewSet` only checks `IsAuthenticated`. Any authenticated user can `DELETE` any shared `Book`, cascading to every `BookRating`/`ReadingListItem` referencing it (both `on_delete=CASCADE`). `Book` has no owner/club concept at all — this isn't a missing-membership-check bug like the others, it's a policy question.
+
+**Proposed default**: restrict `destroy` only to staff (`request.user.is_staff`), leave `create`/`update`/`retrieve`/`list` untouched. Rationale: `create` needs to stay open to any authenticated user (the Google Books import flow depends on it), and there's no natural per-user ownership to restrict `update` to (unlike ratings/reading-list-items) — but `destroy` is the one action that's destructively irreversible for every other user's data referencing that book, and nothing about "delete a shared catalog entry" seems like it should be a routine member action. New `books/permissions.py::IsStaffForDestroy`:
+
+```python
+class IsStaffForDestroy(BasePermission):
+    def has_permission(self, request, view):
+        if view.action == "destroy":
+            return request.user.is_staff
+        return True
+```
+
+Applied alongside `IsAuthenticated` on `BookViewSet`. **This is the one item in this plan I'm not just going to build — confirm the restriction (staff-only destroy) is what you want, or tell me a different rule** (e.g. also lock down `update`, or a different bar than `is_staff`).
+
+**Tests to add**: staff can delete a `Book`; non-staff authenticated user gets `403`; `create`/`update`/`retrieve`/`list` unaffected for regular users.
+
+### Not in this plan
+
+- The `BookRatingSerializer`/`ReadingListItemSerializer` full-`PUT` latent bug noted above (§2) — same shape as the fixed `ClubMeetingSerializer` bug, but nothing currently exercises it.
+- Any further hardening of `BookViewSet.update` — only `destroy` is addressed per the backlog note; `update` wasn't flagged as a problem.
