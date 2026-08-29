@@ -3,7 +3,7 @@
 Three branches, in order:
 1. `feature/club-membership-template-views` — Django template views. ✅ Done, merged 2026-08-07 (PR #2).
 2. `feature/club-membership-drf-api` — DRF viewsets. ✅ Done, implemented 2026-08-10 — see "Phase 2" below for what actually shipped (a couple of things changed from the original sketch once written against the real code).
-3. `fix/permissions-backlog-cleanup` — 📋 Planned, not yet implemented (2026-08-30) — three items that accumulated in `docs/RECOMMENDATIONS.md` §"Permissions review" across Phase 2 and `feature/meeting-location-creation`. See "Phase 3" below; one item (`Book` deletion policy) needs a decision before it's built.
+3. `fix/permissions-backlog-cleanup` — three items that accumulated in `docs/RECOMMENDATIONS.md` §"Permissions review" across Phase 2 and `feature/meeting-location-creation`. See "Phase 3" below.
 
 This supersedes the "Permissions review" paragraph in `docs/RECOMMENDATIONS.md` §2 with an actual plan. It was also a prerequisite for `feature/meeting-location-creation` (parked, see `docs/LOCATIONS_DESIGN.md`) — that branch can now resume, since both the template views and the API it depends on enforce membership correctly.
 
@@ -220,23 +220,30 @@ class ClubMeetingCreateSerializer(serializers.ModelSerializer):
 
 **Tests to add**: successful `create` via the API (previously impossible to test at all — permission-denial was tested, but "member succeeds" never was); successful `update`/`partial_update`; existing permission tests should keep passing unchanged.
 
-### 3. `Book` deletion policy — needs your call
+### 3. `Book` deletion policy — ✅ confirmed 2026-08-30
 
-**The gap**: `BookViewSet` only checks `IsAuthenticated`. Any authenticated user can `DELETE` any shared `Book`, cascading to every `BookRating`/`ReadingListItem` referencing it (both `on_delete=CASCADE`). `Book` has no owner/club concept at all — this isn't a missing-membership-check bug like the others, it's a policy question.
+**The gap**: `BookViewSet` only checks `IsAuthenticated`. Any authenticated user can `DELETE` (or, as discussed, `UPDATE`) any shared `Book`, cascading to every `BookRating`/`ReadingListItem` referencing it (both `on_delete=CASCADE`). `Book` has no owner/club concept at all — this isn't a missing-membership-check bug like the others, it's a policy question.
 
-**Proposed default**: restrict `destroy` only to staff (`request.user.is_staff`), leave `create`/`update`/`retrieve`/`list` untouched. Rationale: `create` needs to stay open to any authenticated user (the Google Books import flow depends on it), and there's no natural per-user ownership to restrict `update` to (unlike ratings/reading-list-items) — but `destroy` is the one action that's destructively irreversible for every other user's data referencing that book, and nothing about "delete a shared catalog entry" seems like it should be a routine member action. New `books/permissions.py::IsStaffForDestroy`:
+**Confirmed**: staff-only for both `update`/`partial_update` and `destroy`; `create`/`retrieve`/`list` stay open to any authenticated user (`create` needs to, for the Google Books import flow to keep working). New `books/permissions.py::IsStaffForModification`:
 
 ```python
-class IsStaffForDestroy(BasePermission):
+class IsStaffForModification(BasePermission):
+    """Only staff can change or remove a shared Book.
+
+    create/retrieve/list stay open to any authenticated user - Book has no
+    owner/club concept to restrict update to otherwise, and create needs to
+    stay open for the Google Books import flow.
+    """
+
     def has_permission(self, request, view):
-        if view.action == "destroy":
+        if view.action in ("update", "partial_update", "destroy"):
             return request.user.is_staff
         return True
 ```
 
-Applied alongside `IsAuthenticated` on `BookViewSet`. **This is the one item in this plan I'm not just going to build — confirm the restriction (staff-only destroy) is what you want, or tell me a different rule** (e.g. also lock down `update`, or a different bar than `is_staff`).
+Applied alongside `IsAuthenticated` on `BookViewSet`.
 
-**Tests to add**: staff can delete a `Book`; non-staff authenticated user gets `403`; `create`/`update`/`retrieve`/`list` unaffected for regular users.
+**Tests to add**: staff can update/delete a `Book`; non-staff authenticated user gets `403` for both; `create`/`retrieve`/`list` unaffected for regular users.
 
 ### Not in this plan
 

@@ -277,3 +277,71 @@ class BookRatingViewSetOwnershipTests(TestCase):
 
         self.assertEqual(list_response.status_code, 200)
         self.assertEqual(detail_response.status_code, 200)
+
+
+class BookViewSetStaffOnlyModificationTests(TestCase):
+    # Regression coverage: BookViewSet used to only check IsAuthenticated -
+    # any authenticated user could update or delete any shared Book,
+    # cascading to every rating/reading-list-item referencing it.
+    def setUp(self):
+        self.regular_user = make_user("reader@example.com")
+        self.staff_user = CustomUser.objects.create_user(
+            email="staff@example.com",
+            password="password123",
+            first_name="Staff",
+            last_name="User",
+            is_staff=True,
+        )
+        self.book = Book.objects.create(title="Dune", year=1965)
+        self.detail_url = reverse("books:api-book-detail", kwargs={"pk": self.book.pk})
+
+    def test_regular_user_cannot_update_a_book(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.patch(
+            self.detail_url, {"year": 1970}, content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.year, 1965)
+
+    def test_staff_can_update_a_book(self):
+        self.client.force_login(self.staff_user)
+
+        response = self.client.patch(
+            self.detail_url, {"year": 1970}, content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.year, 1970)
+
+    def test_regular_user_cannot_delete_a_book(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.delete(self.detail_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Book.objects.filter(pk=self.book.pk).exists())
+
+    def test_staff_can_delete_a_book(self):
+        self.client.force_login(self.staff_user)
+
+        response = self.client.delete(self.detail_url)
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Book.objects.filter(pk=self.book.pk).exists())
+
+    def test_regular_user_can_still_create_and_read(self):
+        self.client.force_login(self.regular_user)
+
+        list_response = self.client.get(reverse("books:api-book-list"))
+        detail_response = self.client.get(self.detail_url)
+        create_response = self.client.post(
+            reverse("books:api-book-list"), {"title": "New Book"}
+        )
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(create_response.status_code, 201)

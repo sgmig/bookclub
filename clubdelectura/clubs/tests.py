@@ -1,14 +1,9 @@
 from datetime import timedelta
-from types import SimpleNamespace
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-
-from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.request import Request
-from rest_framework.test import APIRequestFactory
 
 from accounts.models import CustomUser
 from books.models import Book, BookRating
@@ -21,7 +16,6 @@ from clubs.models import (
     ReadingList,
     ReadingListItem,
 )
-from clubs.permissions import IsClubMember
 from locations.models import Location
 
 
@@ -647,6 +641,25 @@ class ReadingListItemAPIPermissionTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
 
+    def test_member_cannot_repoint_item_to_a_list_they_have_no_access_to(self):
+        # Regression test: same fix as ClubMeetingAPIPermissionTests above -
+        # has_permission used to only validate `reading_list` on create.
+        # self.member belongs to self.club (so can access self.club_item)
+        # but has no access to self.owner's personal_list.
+        self.client.force_login(self.member)
+
+        response = self.client.patch(
+            reverse(
+                "clubs:api-reading-list-item-detail", kwargs={"pk": self.club_item.pk}
+            ),
+            {"reading_list": self.personal_list.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.club_item.refresh_from_db()
+        self.assertEqual(self.club_item.reading_list, self.club_list)
+
     def test_non_member_cannot_retrieve_club_item(self):
         # 404, not 403: get_queryset() is scoped to accessible items, so a
         # non-member's request never finds the object at all (via DRF's
@@ -711,19 +724,6 @@ class ReadingListItemAPIPermissionTests(TestCase):
 
 
 class ClubMeetingAPIPermissionTests(TestCase):
-    # NOTE: ClubMeetingSerializer nests `location` and `discussed_books` as
-    # writable-by-default nested serializers with no create()/update()
-    # override on the serializer or the viewset. This means POST/PUT/PATCH
-    # against this endpoint already raised an AssertionError
-    # ("`.create()` method does not support writable nested fields") before
-    # this permissions work, and still does - a pre-existing, unrelated bug,
-    # confirmed empirically while writing these tests and left unfixed here
-    # (see docs/PERMISSIONS_DESIGN.md). So `create`/`update` permission
-    # denial is tested directly (which happens before serializer validation
-    # and is unaffected by that bug), and the "member is allowed" side of
-    # `create` is tested against the permission class in isolation rather
-    # than via a full POST, since a full POST can't succeed today
-    # regardless of permissions.
     def setUp(self):
         self.club, self.member, self.owner = make_club_with_member()
         self.other_club, self.other_member, _ = make_club_with_member(
@@ -819,35 +819,58 @@ class ClubMeetingAPIPermissionTests(TestCase):
 
         self.assertEqual(response.data, [])
 
-    def _create_permission_request(self, user):
-        # Request() built directly (not via APIView.initialize_request())
-        # gets an empty parser list unless passed explicitly - without this
-        # it can't parse the multipart body APIRequestFactory built. Its
-        # `.user` is also a lazy property that re-authenticates from
-        # self.authenticators (empty here, so it'd resolve to AnonymousUser)
-        # rather than reading django_request.user - must go through the
-        # Request's own `.user` setter instead, which correctly sets both.
-        factory = APIRequestFactory()
-        django_request = factory.post("/", {"club": self.club.pk})
-        request = Request(django_request, parsers=[MultiPartParser(), FormParser()])
-        request.user = user
-        return request
+    def test_member_can_create_meeting(self):
+        # Regression test: ClubMeetingSerializer used to nest location/
+        # discussed_books as writable-by-default with no create() override,
+        # so this POST always raised an AssertionError regardless of
+        # permissions. Fixed via ClubMeetingCreateSerializer.
+        self.client.force_login(self.member)
 
-    def test_permission_class_allows_member_to_create(self):
-        # See class docstring: a full POST can't succeed today regardless
-        # of permissions (unrelated pre-existing serializer bug), so the
-        # "member is allowed" half of create permission is tested against
-        # the permission class directly.
-        request = self._create_permission_request(self.member)
-        view = SimpleNamespace(action="create")
+        response = self.client.post(
+            reverse("clubs:api-club-meeting-list"),
+            {
+                "club": self.club.pk,
+                "date": timezone.now().isoformat(),
+                "location": self.location.pk,
+                "notes": "First meeting",
+            },
+        )
 
-        self.assertTrue(IsClubMember().has_permission(request, view))
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(
+            ClubMeeting.objects.filter(club=self.club, notes="First meeting").exists()
+        )
 
-    def test_permission_class_denies_non_member_create(self):
-        request = self._create_permission_request(self.outsider)
-        view = SimpleNamespace(action="create")
+    def test_member_can_update_meeting_without_changing_club(self):
+        self.client.force_login(self.member)
 
-        self.assertFalse(IsClubMember().has_permission(request, view))
+        response = self.client.patch(
+            reverse("clubs:api-club-meeting-detail", kwargs={"pk": self.meeting.pk}),
+            {"notes": "Updated notes"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.meeting.refresh_from_db()
+        self.assertEqual(self.meeting.notes, "Updated notes")
+
+    def test_member_cannot_repoint_meeting_to_a_club_they_dont_belong_to(self):
+        # Regression test: has_permission used to only check the club field
+        # on `create`, not `update`/`partial_update` - has_object_permission
+        # only re-checks the object's *existing* club, so nothing stopped a
+        # member re-targeting an object they own at a club they don't
+        # belong to via the payload.
+        self.client.force_login(self.member)
+
+        response = self.client.patch(
+            reverse("clubs:api-club-meeting-detail", kwargs={"pk": self.meeting.pk}),
+            {"club": self.other_club.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.meeting.refresh_from_db()
+        self.assertEqual(self.meeting.club, self.club)
 
 
 class ReadingListItemRowViewTests(TestCase):
@@ -1052,3 +1075,28 @@ class ClubLocationAPITests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+
+    def test_member_cannot_repoint_a_club_location_to_a_club_they_dont_belong_to(self):
+        # Regression test: same fix as ClubMeetingAPIPermissionTests above -
+        # has_permission used to only validate `club` on create.
+        other_club, _, _ = make_club_with_member(
+            name="Other Club",
+            email="other-club-member@example.com",
+            owner_email="other-club-owner@example.com",
+        )
+        club_location = ClubLocation.objects.create(
+            club=self.club, location=self.location
+        )
+        self.client.force_login(self.member)
+
+        response = self.client.patch(
+            reverse(
+                "clubs:api-club-location-detail", kwargs={"pk": club_location.pk}
+            ),
+            {"club": other_club.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        club_location.refresh_from_db()
+        self.assertEqual(club_location.club, self.club)
