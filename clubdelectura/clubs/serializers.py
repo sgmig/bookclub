@@ -105,10 +105,39 @@ class ClubLocationCreateSerializer(serializers.ModelSerializer):
 
 # Club Meetings Serializer
 class ClubMeetingSerializer(serializers.ModelSerializer):
+    """Read/detail serializer - not used for create/update (see
+    ClubMeetingCreateSerializer below). location and discussed_books are
+    read_only: nested serializers aren't writable without a custom
+    create()/update(), which is exactly what previously made every
+    create/update against this endpoint crash with "doesn't support
+    writable nested fields".
+    """
 
-    discussed_books = ReadingListItemSerializer(many=True)
-    location = LocationSerializer()
+    discussed_books = ReadingListItemSerializer(many=True, read_only=True)
+    location = LocationSerializer(read_only=True)
 
     class Meta:
         model = ClubMeeting
         fields = ["id", "club", "date", "location", "discussed_books", "notes"]
+
+
+class ClubMeetingCreateSerializer(serializers.ModelSerializer):
+    """Serializer for ClubMeeting used for create/update.
+
+    All relations are PrimaryKeyRelatedFields referencing existing objects,
+    mirroring ReadingListItemCreateSerializer/ClubLocationCreateSerializer -
+    creating a new Location or ReadingListItem is a separate call to their
+    own APIs.
+    """
+
+    club = serializers.PrimaryKeyRelatedField(queryset=Club.objects.all())
+    location = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(), required=False, allow_null=True
+    )
+    discussed_books = serializers.PrimaryKeyRelatedField(
+        queryset=ReadingListItem.objects.all(), many=True, required=False
+    )
+
+    class Meta:
+        model = ClubMeeting
+        fields = ["club", "date", "location", "discussed_books", "notes"]

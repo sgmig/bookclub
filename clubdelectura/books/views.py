@@ -38,7 +38,7 @@ from dal import autocomplete
 
 from books.models import Book, Author, BookRating
 from books.forms import GoogleBooksSearchForm, BookForm, BookRatingForm
-from books.permissions import IsRatingOwnerOrReadOnly
+from books.permissions import IsRatingOwnerOrReadOnly, IsStaffForModification
 from books.serializers import (
     BookSerializer,
     BookRatingSerializer,
@@ -349,7 +349,7 @@ class BookAutoCompleteView(autocomplete.Select2QuerySetView):
 class BookViewSet(ModelViewSet):
     queryset = Book.objects.all()
     serializer_class = BookSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffForModification]
 
     @action(detail=False, methods=["post"], url_path="create-from-search")
     def create_from_search(self, request, *args, **kwargs):

@@ -35,6 +35,7 @@ from clubs.serializers import (
     ReadingListItemSerializer,
     ReadingListItemCreateSerializer,
     ClubMeetingSerializer,
+    ClubMeetingCreateSerializer,
     ClubLocationSerializer,
     ClubLocationCreateSerializer,
 )
@@ -449,8 +450,12 @@ class ReadingListItemViewSet(ModelViewSet):
 
 @extend_schema(tags=["Club Meetings"])
 class ClubMeetingViewSet(ModelViewSet):
-    serializer_class = ClubMeetingSerializer
     permission_classes = [IsAuthenticated, IsClubMember]
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return ClubMeetingCreateSerializer
+        return ClubMeetingSerializer
 
     def get_queryset(self):
         # Scoped to the requesting user's own clubs, regardless of the
@@ -461,6 +466,22 @@ class ClubMeetingViewSet(ModelViewSet):
         if club_id:
             queryset = queryset.filter(club_id=club_id)
         return queryset
+
+    @extend_schema(
+        request=ClubMeetingCreateSerializer,
+        responses={201: ClubMeetingSerializer},
+    )
+    def create(self, request, *args, **kwargs):
+        # Use the CreateSerializer for input validation
+        create_serializer = self.get_serializer(data=request.data)
+        create_serializer.is_valid(raise_exception=True)
+        self.perform_create(create_serializer)
+
+        # Re-serialize the created instance using the detail serializer
+        detail_serializer = ClubMeetingSerializer(
+            create_serializer.instance, context=self.get_serializer_context()
+        )
+        return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
         parameters=[

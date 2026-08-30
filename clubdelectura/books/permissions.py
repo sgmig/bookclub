@@ -14,3 +14,19 @@ class IsRatingOwnerOrReadOnly(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return obj.user == request.user
+
+
+class IsStaffForModification(BasePermission):
+    """Only staff can change or remove a shared Book.
+
+    create/retrieve/list stay open to any authenticated user - Book has no
+    owner/club concept to restrict update to otherwise, and create needs to
+    stay open for the Google Books import flow.
+    """
+
+    message = "Only staff can modify or delete books."
+
+    def has_permission(self, request, view):
+        if view.action in ("update", "partial_update", "destroy"):
+            return request.user.is_staff
+        return True
