@@ -112,3 +112,11 @@ What shipped, roughly matching the original plan otherwise:
 - Tests: `userdashboard/tests.py` grew from the original club-list-only coverage to include `UserDashboardViewTests` (context scoping, reading-list/location filtering), `UserDashboardClubPreviewViewTests` (member/non-member/anonymous/upcoming-vs-no-meeting), and `UserDashboardRatingPreviewViewTests` (owner/non-owner-404/anonymous). Full suite: 147 tests, all passing.
 
 Bug found during browser verification (Playwright, headless Chromium): the Ratings tab template originally explained the `book-rating-link`/`data-book-id` reuse trick with a `{# ... #}` Django comment spanning multiple lines. Django's single-line comment tag doesn't support multi-line content — it rendered as literal visible text above the ratings list in the browser. Fixed by switching to `{% comment %}...{% endcomment %}` block syntax; re-verified via screenshot afterward, and grepped the rest of the new templates to confirm no other instance of the same mistake.
+
+### Follow-up: "Create new club" button on the My Clubs tab
+
+Added a "Create new club" button under the club list, linking to `clubs:club-create` — same placement/style as the "New reading list" button on the Reading Lists tab.
+
+This surfaced a pre-existing inconsistency: `ClubCreateView.success_url` redirected to `clubs:club-list` (the browse-all-clubs page, not filtered to the user's own clubs) after creating a club. Changed it to `get_success_url` returning the new club's own detail page instead — consistent with `ReadingListCreateView`, which already redirects to the new list's detail page rather than back to a hub, and the more useful landing spot after creating something you're about to set up (invite members, plan a meeting) rather than bouncing back to a list. `ClubUpdateView`/`ClubDeleteView` were left pointing at `club-list`, since that's still the right place to land after editing or removing a club you're not about to look at further.
+
+Updated `test_create_club_redirects_to_club_list` → `test_create_club_redirects_to_club_detail` in `clubs/tests.py` to match. Browser-verified end to end: clicked the new button from the dashboard, filled out the form, submitted, landed on the new club's detail page.

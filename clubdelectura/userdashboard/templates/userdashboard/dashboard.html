@@ -46,6 +46,7 @@
                         <li class="list-group-item">You are not a member of any clubs yet.</li>
                         {% endfor %}
                     </ul>
+                    <a class="btn btn-secondary" href="{% url 'clubs:club-create' %}">Create new club</a>
                 </div>
                 <div id="club-preview-panel" class="col-md-8 mb-1" style="display: none;">
                     <!-- Club preview is loaded here -->
