@@ -93,3 +93,22 @@ Same shell as `club_detail.html`: `<h1>`/header, Bootstrap `nav-tabs`, `tab-cont
 - Any editing/creation UI on the Locations tab beyond what already exists (the meeting-form modal).
 - The "table view toggle" backlog item itself (book-title vs. user-name columns as a *general*, reusable switch) — this branch only builds the one new variant it needs for the Ratings tab, not a generalized toggle.
 - Removing the underlying `club=None` reading-list data model in favor of anything club-shaped — per the design decision above, personal stays personal.
+
+## Implementation notes
+
+Open questions were resolved as follows, each a deviation from my original proposal:
+
+1. **`UserClubListView` kept, not removed.** Marked with a `# TODO: deprecated` comment pointing at the new "My Clubs" tab as its replacement. Nothing links to it from the new dashboard, but it stays reachable at `readers/my_clubs/` and its tests are unchanged.
+2. **My Clubs left panel shows member count**: `{{ club.name }} - {{ club.members.count }} member{{ club.members.count|pluralize }}`, not name-only.
+3. **Ratings tab kept the left/right split** (not the flat table I'd proposed), for consistency with the other three tabs: left panel lists `{{ book.title }} - {{ rating }}`, right panel (`rating_preview_panel.html`) shows title, rating, comment, and an Edit button that opens the existing book-rating modal.
+
+What shipped, roughly matching the original plan otherwise:
+
+- `UserDashboardView` now filters `reading_lists` to `club__isnull=True` and unions `Location.objects.filter(created_by=user)` with `Location.objects.filter(club_locations__club__in=user.clubs.all())`, deduplicated with `.distinct()`.
+- `UserDashboardClubPreviewView` (`ClubMemberRequiredMixin` + `DetailView`) and `UserDashboardRatingPreviewView` (ownership-scoped queryset, so a non-owner gets a 404 rather than a 403) back the two click-through panels.
+- The Reading Lists tab's right panel is the unmodified `clubs:reading-list-detail-panel` URL/view/partial, exactly as planned — zero new backend code for that tab.
+- `userdashboard/static/userdashboard/js/dashboard.js` follows the established fetch-and-inject panel pattern, and reuses `bindBookRatingModalButtons` from `books/js/book_rating_list/book_rating_list_buttons.js` (imported as an ES module) to rewire the Edit button each time the rating panel reloads, rather than duplicating that logic.
+- The Ratings tab's left-panel links carry both a `rating-preview-link` class (this dashboard's own click handler) and a `book-rating-link` class with `data-book-id` (unused by any dashboard code — present only so the *existing*, unmodified `refreshBookRatingList()` in the shared button-binding file can find and re-click this link after a successful modal edit, without that shared file needing to know the dashboard exists).
+- Tests: `userdashboard/tests.py` grew from the original club-list-only coverage to include `UserDashboardViewTests` (context scoping, reading-list/location filtering), `UserDashboardClubPreviewViewTests` (member/non-member/anonymous/upcoming-vs-no-meeting), and `UserDashboardRatingPreviewViewTests` (owner/non-owner-404/anonymous). Full suite: 147 tests, all passing.
+
+Bug found during browser verification (Playwright, headless Chromium): the Ratings tab template originally explained the `book-rating-link`/`data-book-id` reuse trick with a `{# ... #}` Django comment spanning multiple lines. Django's single-line comment tag doesn't support multi-line content — it rendered as literal visible text above the ratings list in the browser. Fixed by switching to `{% comment %}...{% endcomment %}` block syntax; re-verified via screenshot afterward, and grepped the rest of the new templates to confirm no other instance of the same mistake.

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<div class="mb-1">
+    <h3 id="rating-preview-title">{{ book_rating.book.title }}</h3>
+    <h5 class="text-muted">{{ book_rating.book.list_authors }}</h5>
+</div>
+<p><strong>Rating:</strong> {{ book_rating.rating }}</p>
+<p>
+    <strong>Comment:</strong>
+    {% if book_rating.comment %}
+    {{ book_rating.comment|linebreaks }}
+    {% else %}
+    <em>No comment</em>
+    {% endif %}
+</p>
+<button type="button" class="btn btn-primary open-book-rating-modal-btn"
+    data-book-rating-modal-url="{% url 'books:book-rating-modal' %}?book_rating_id={{ book_rating.id }}">
+    Edit
+</button>

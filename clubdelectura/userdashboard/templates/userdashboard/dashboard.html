@@ -1,147 +1,143 @@
 <!DOCTYPE html>
 {% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'clubs/css/club_meeting.css' %}">
+{% endblock %}
 
 {% block content %}
+<div class="container mt-4">
+    <h1>Welcome, {{ user.first_name }}</h1>
 
-<div class="container">
-    <h2>Welcome, {{ user.first_name }}</h2>
+    <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link" id="my-clubs-tab" data-bs-toggle="tab" data-bs-target="#my-clubs" type="button"
+                role="tab">My Clubs</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="reading-lists-tab" data-bs-toggle="tab" data-bs-target="#reading-lists"
+                type="button" role="tab">Reading lists</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="ratings-tab" data-bs-toggle="tab" data-bs-target="#ratings" type="button"
+                role="tab">Ratings</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="locations-tab" data-bs-toggle="tab" data-bs-target="#locations"
+                type="button" role="tab">Locations</button>
+        </li>
+    </ul>
 
-
-    <div class="container mt-4">
-        <a href="{% url 'user_dashboard:user_clubs' %}" class="btn btn-primary">My book clubs</a>
-        <div class="row">
-            <!-- Club List (1/3 width) -->
-            <div class="col-md-4">
-                <div class="card p-2 shadow-sm">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between">
-                        <h5 class="mb-0">Your Clubs</h5>
-                        <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addClubModal">+
-                            Add</button>
-                    </div>
-                    <div class="club-list overflow-auto" style="max-height: 400px;">
-                        <!-- Example Club Item -->
-                        <div class="list-group">
-                            {% for club in clubs %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center">
-                                <span>📚 {{ club.name }}</span>
-                                <div>
-                                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'clubs:club-detail' club.id %}">✏ Edit</a>
-                                    <button class="btn btn-outline-danger btn-sm">❌</button>
-                                </div>
-                            </div>
-                            {% empty %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center">
-                                <span> You are not part of any clubs yet. Add one and invite your friends!</span>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
+    <div class="tab-content mt-3">
+        <!-- My Clubs Tab -->
+        <div class="tab-pane fade" id="my-clubs" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-1">
+                    <ul class="list-group mb-1 overflow-y-auto" style="max-height: 60vh;">
+                        {% for club in clubs %}
+                        <a href="#" class="list-group-item list-group-item-action club-preview-link"
+                            data-club-preview-url="{% url 'user_dashboard:club-preview' club.id %}">
+                            {{ club.name }} - {{ club.members.count }} member{{ club.members.count|pluralize }}
+                        </a>
+                        {% empty %}
+                        <li class="list-group-item">You are not a member of any clubs yet.</li>
+                        {% endfor %}
+                    </ul>
                 </div>
-            </div>
-
-            <!-- Other Content (Remaining 2/3 of the width) -->
-            <div class="col-md-8">
-                <div class="card p-4 shadow-sm">
-                    <h4>Select a club to view details</h4>
-                    <p>Club details and interactions go here.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add Club Modal -->
-    <div class="modal fade" id="addClubModal" tabindex="-1" aria-labelledby="addClubModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="addClubModalLabel">Add Club</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form>
-                        <div class="mb-3">
-                            <label for="clubName" class="form-label">Club Name</label>
-                            <input type="text" class="form-control" id="clubName" placeholder="Enter club name">
-                        </div>
-                        <button type="submit" class="btn btn-primary">Save</button>
-                    </form>
+                <div id="club-preview-panel" class="col-md-8 mb-1" style="display: none;">
+                    <!-- Club preview is loaded here -->
                 </div>
             </div>
         </div>
-    </div>
 
-
-    <div class="container mt-4">
-        <div class="row">
-            <!-- Reading Lists List (1/3 width) -->
-            <div class="col-md-4">
-                <div class="card p-2 shadow-sm">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between">
-                        <h5 class="mb-0">Reading Lists</h5>
-                        <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addClubModal">+
-                            Add</button>
-                    </div>
-                    <div class="club-list overflow-auto" style="max-height: 400px;">
-                        <!-- Example Club Item -->
-                        <div class="list-group">
-                            {% for reading_list in reading_lists %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center">
-                                <span>📚 {{ reading_list.name }} - {{ reading_list.books.count }} books</span>
-                                <div>
-                                    <button class="btn btn-outline-secondary btn-sm">✏ Edit</button>
-                                    <button class="btn btn-outline-danger btn-sm">❌</button>
-                                </div>
-                            </div>
-                            {% empty %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center">
-                                <span> You do not have any lists yet. Create yout first!</span>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
+        <!-- Reading Lists Tab -->
+        <div class="tab-pane fade" id="reading-lists" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-1">
+                    <h3>Reading Lists</h3>
+                    <ul class="list-group mb-1 overflow-y-auto" style="max-height: 60vh;">
+                        {% for reading_list in reading_lists %}
+                        <a href="#" class="list-group-item list-group-item-action reading-list-link"
+                            data-reading-list-partial-details-url="{% url 'clubs:reading-list-detail-panel' reading_list.id %}">
+                            {{ reading_list.name }}</a>
+                        {% empty %}
+                        <li class="list-group-item">You do not have any reading lists yet.</li>
+                        {% endfor %}
+                    </ul>
+                    <a class="btn btn-secondary" href="{% url 'clubs:reading-list-create' %}">New reading list</a>
+                </div>
+                <div id="reading-list-items-panel" class="col-md-8" style="display: none;">
+                    <!-- Partial template will be loaded here -->
                 </div>
             </div>
+        </div>
 
-
-            <div class="container mt-4">
-                <div class="row">
-                    <!-- Book ratings List (1/3 width) -->
-                    <div class="col-md-4">
-                        <div class="card p-2 shadow-sm">
-                            <div class="card-header bg-primary text-white d-flex justify-content-between">
-                                <h5 class="mb-0">Book ratings</h5>
-                                <button class="btn btn-light btn-sm" data-bs-toggle="modal"
-                                    data-bs-target="#addClubModal">+
-                                    Add</button>
-                            </div>
-                            <div class="club-list overflow-auto" style="max-height: 400px;">
-                                <!-- Book ratings -->
-                                <div class="list-group">
-                                    {% for rating in book_ratings %}
-                                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                                        <span>{{ rating.book.title }} - {{ rating.rating }}⭐</span>
-                                        <div>
-                                            <button class="btn btn-outline-secondary btn-sm">✏ Edit</button>
-                                            <button class="btn btn-outline-danger btn-sm">❌</button>
-                                        </div>
-                                    </div>
-                                    {% empty %}
-                                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                                        <span> You have not rated any books yet</span>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+        <!-- Ratings Tab -->
+        <div class="tab-pane fade" id="ratings" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-1">
+                    <ul class="list-group mb-1 overflow-y-auto" style="max-height: 60vh;">
+                        {% for rating in book_ratings %}
+                        {% comment %}
+                        book-rating-link/data-book-id: not used by our own JS -
+                        only so book_rating_list_buttons.js's existing
+                        refresh-after-edit logic (refreshBookRatingList) can
+                        find and re-click this link once the rating modal
+                        saves, reusing that behavior without editing the
+                        shared file.
+                        {% endcomment %}
+                        <a href="#" class="list-group-item list-group-item-action rating-preview-link book-rating-link"
+                            data-rating-preview-url="{% url 'user_dashboard:rating-preview' rating.id %}"
+                            data-book-id="{{ rating.book.id }}">
+                            {{ rating.book.title }} - {{ rating.rating }}
+                        </a>
+                        {% empty %}
+                        <li class="list-group-item">You have not rated any books yet.</li>
+                        {% endfor %}
+                    </ul>
+                    <a class="btn btn-secondary" href="{% url 'books:book-rating-create' %}">Add rating</a>
                 </div>
+                <div id="rating-preview-panel" class="col-md-8 mb-1" style="display: none;">
+                    <!-- Rating preview is loaded here -->
+                </div>
+            </div>
+        </div>
 
-                <div class="row p-2">
-                    <a href="{% url 'accounts:logout_confirmation' %}" class="btn btn-primary">Log out</a>
-                    {% if user.is_staff %}
-                    <a href="{% url 'admin:index' %}" class="btn btn-primary">ADMIN</a>
+        <!-- Locations Tab -->
+        <div class="tab-pane fade" id="locations" role="tabpanel">
+            <ul class="list-group mb-1 overflow-y-auto" style="max-height: 60vh;">
+                {% for location in locations %}
+                <li class="list-group-item">
+                    <strong>{{ location.name }}</strong>
+                    {% if location.is_private and not location.address %}
+                    <span class="text-muted">— details no longer available</span>
+                    {% elif location.address %}
+                    <span class="text-muted">— {{ location.address }}</span>
                     {% endif %}
-                </div>
+                </li>
+                {% empty %}
+                <li class="list-group-item">No locations yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
 
-            </div>
-            {% endblock %}
+<!-- Rate/edit rating modal. Content is fetched dynamically. -->
+<div class="modal fade" id="bookRatingModal" aria-labelledby="bookRatingModalLabel" aria-hidden="true"
+        tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" id="bookRatingModalContent">
+      <!-- Content will be loaded here dynamically -->
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script type="module" src="{% static 'clubs/js/reading_list/dynamic_init.js' %}"></script>
+<script type="module" src="{% static 'userdashboard/js/dashboard.js' %}"></script>
+{% endblock %}
