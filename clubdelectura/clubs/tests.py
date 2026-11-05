@@ -107,14 +107,14 @@ class ClubCRUDViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("accounts:login"), response.url)
 
-    def test_create_club_redirects_to_club_list(self):
+    def test_create_club_redirects_to_club_detail(self):
         response = self.client.post(
             reverse("clubs:club-create"),
             {"name": "New Club", "description": "A club.", "members": [self.user.pk]},
         )
 
-        self.assertRedirects(response, reverse("clubs:club-list"))
-        self.assertTrue(Club.objects.filter(name="New Club").exists())
+        club = Club.objects.get(name="New Club")
+        self.assertRedirects(response, reverse("clubs:club-detail", kwargs={"pk": club.pk}))
 
     def test_create_club_adds_creator_as_member(self):
         # Regression test: creating a club used to only set created_by,

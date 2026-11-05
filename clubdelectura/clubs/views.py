@@ -97,7 +97,6 @@ class ClubDetailView(LoginRequiredMixin, DetailView):
 class ClubCreateView(LoginRequiredMixin, CreateView):
     model = Club
     form_class = ClubForm
-    success_url = reverse_lazy("clubs:club-list")
 
     def form_valid(self, form):
         form.instance.created_by = self.request.user
@@ -107,6 +106,9 @@ class ClubCreateView(LoginRequiredMixin, CreateView):
         # now required to manage the club afterward, so guarantee it here.
         ClubMembership.objects.get_or_create(user=self.request.user, club=self.object)
         return response
+
+    def get_success_url(self):
+        return reverse_lazy("clubs:club-detail", kwargs={"pk": self.object.pk})
 
 
 class ClubUpdateView(ClubMemberRequiredMixin, UpdateView):
